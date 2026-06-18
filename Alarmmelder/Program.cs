@@ -20,6 +20,9 @@ namespace MioneAlarmmelder
                 }
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) { Core.ErrorLogger.Log("Programm", e.Exception); };
+                AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Core.ErrorLogger.Log("Programm", e.ExceptionObject as Exception == null ? "Unbehandelter Fehler" : e.ExceptionObject.ToString()); };
                 Application.Run(new AlarmApplicationContext());
             }
         }

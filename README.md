@@ -8,8 +8,12 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - lädt Rufnummern/Aktivschalter, Alarmprioritäten und deutsche Alarmtexte dynamisch neu
 - erzeugt pro aktiver Rufnummer eine JSON-Nachricht
 - versendet per MQTT 3.1.1 (QoS 0) und/oder TCP-Socket
+- unterstützt für MQTT und TCP sowohl IPv4 als auch IPv6
 - sendet für MQTT und TCP getrennte JSON-Heartbeats (Standard: alle 60 Sekunden)
 - prüft ein konfigurierbares öffentliches GitHub-Repository automatisch auf neue Releases
+- zeigt Datei-, Verbindungs-, Heartbeat- und Updatefehler in einem eigenen Protokoll-Tab
+- zeigt Kuhnummer und installierte Programmversion direkt in der Oberfläche
+- kann einen gekennzeichneten Testfehler über die aktivierten Versandwege senden
 - speichert das MQTT-Passwort mit Windows DPAPI verschlüsselt
 - läuft nach dem Schließen im Infobereich weiter; LED-Farbe zeigt den Zustand
 - zeigt beim Start das Banner und auf jedem Dialog das Logo

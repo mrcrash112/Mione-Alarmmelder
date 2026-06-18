@@ -29,6 +29,7 @@
     <Compile Include="Program.cs" /><Compile Include="AlarmApplicationContext.cs" />
     <Compile Include="Core\AlarmMessage.cs" /><Compile Include="Core\AppSettings.cs" />
     <Compile Include="Core\EmbeddedImages.cs" />
+    <Compile Include="Core\ErrorLogger.cs" />
     <Compile Include="Core\FileMonitorService.cs" /><Compile Include="Core\PropertiesFile.cs" />
     <Compile Include="Core\SettingsStore.cs" /><Compile Include="Core\StartupRegistration.cs" />
     <Compile Include="Core\GitHubUpdateService.cs" />

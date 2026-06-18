@@ -16,17 +16,26 @@ namespace MioneAlarmmelder.Forms
         private AppSettings settings; private bool allowClose;
         public event EventHandler SettingsSaved;
         public event EventHandler UpdateCheckRequested;
+        public event EventHandler TestAlarmRequested;
 
         public MainForm(AppSettings value)
         {
             settings = value; InitializeComponent(); LoadLogo(); LoadFields();
             saveButton.Click += SaveClick; testButton.Click += TestClick; pathDialogButton.Click += PathDialogClick;
+            testAlarmButton.Click += TestAlarmClick;
             updateCheckButton.Click += delegate { if (ReadFields() && UpdateCheckRequested != null) UpdateCheckRequested(this, EventArgs.Empty); };
+            errorRefreshButton.Click += delegate { LoadErrorLog(); };
+            errorClearButton.Click += ErrorClearClick;
+            ErrorLogger.ErrorLogged += ErrorWasLogged;
+            tabs.SelectedIndexChanged += delegate { UpdateActionButtons(); };
             FormClosing += MainFormClosing; Resize += Resized;
             trayMenu = new ContextMenuStrip(); trayMenu.Items.Add("Öffnen", null, delegate { ShowWindow(); });
             trayMenu.Items.Add("Beenden", null, delegate { allowClose = true; Close(); });
             trayIcon = new NotifyIcon(); trayIcon.Text = "Mione Alarmmelder - startet"; trayIcon.ContextMenuStrip = trayMenu; trayIcon.Visible = true;
             trayIcon.DoubleClick += delegate { ShowWindow(); }; SetStatus("Wird gestartet ...", MonitorState.Waiting); ResetConnectionStatus();
+            versionLabel.Text = "Version " + GitHubUpdateService.CurrentVersion;
+            errorPathLabel.Text = "Datei: " + ErrorLogger.FilePath; LoadErrorLog();
+            UpdateActionButtons();
         }
 
         public void SetStatus(string text, MonitorState state)
@@ -42,7 +51,7 @@ namespace MioneAlarmmelder.Forms
         {
             if (InvokeRequired) { BeginInvoke(new Action<AlarmMessage>(AddAlarm), alarm); return; }
             ListViewItem item = new ListViewItem(alarm.DateText + " " + alarm.TimeText); item.SubItems.Add(alarm.Code);
-            item.SubItems.Add(alarm.Location); item.SubItems.Add(alarm.Priority); item.SubItems.Add(alarm.ClearText); alarmList.Items.Insert(0, item);
+            item.SubItems.Add(alarm.Location); item.SubItems.Add(alarm.CowNumber); item.SubItems.Add(alarm.Priority); item.SubItems.Add(alarm.ClearText); alarmList.Items.Insert(0, item);
             while (alarmList.Items.Count > 200) alarmList.Items.RemoveAt(alarmList.Items.Count - 1);
         }
 
@@ -62,6 +71,31 @@ namespace MioneAlarmmelder.Forms
         }
 
         public void ExitForUpdate() { allowClose = true; Close(); }
+
+        private void LoadErrorLog()
+        {
+            if (InvokeRequired) { BeginInvoke((MethodInvoker)LoadErrorLog); return; }
+            errorList.Items.Clear(); ErrorLogEntry[] entries = ErrorLogger.ReadRecent(500);
+            for (int i = 0; i < entries.Length; i++) AddErrorEntry(entries[i]);
+        }
+
+        private void AddErrorEntry(ErrorLogEntry entry)
+        {
+            ListViewItem item = new ListViewItem(entry.Time.ToString("dd.MM.yyyy HH:mm:ss")); item.SubItems.Add(entry.Source); item.SubItems.Add(entry.Message); errorList.Items.Add(item);
+        }
+
+        private void ErrorWasLogged(object sender, ErrorLoggedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(new EventHandler<ErrorLoggedEventArgs>(ErrorWasLogged), sender, e); return; }
+            errorList.Items.Insert(0, new ListViewItem(new string[] { e.Entry.Time.ToString("dd.MM.yyyy HH:mm:ss"), e.Entry.Source, e.Entry.Message }));
+            while (errorList.Items.Count > 500) errorList.Items.RemoveAt(errorList.Items.Count - 1);
+        }
+
+        private void ErrorClearClick(object sender, EventArgs e)
+        {
+            if (MessageBox.Show("Fehlerprotokoll wirklich löschen?", "Fehlerprotokoll", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            ErrorLogger.Clear(); errorList.Items.Clear();
+        }
 
         public void SetPhones(KeyValuePair<string, bool>[] phones)
         {
@@ -120,24 +154,32 @@ namespace MioneAlarmmelder.Forms
             {
                 SetMqttStatus("wird geprüft", MonitorState.Sending);
                 try { MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, settings.MqttTopic.Replace("{kunde}", settings.CustomerId), "{\"test\":true}"); SetMqttStatus("verbunden", MonitorState.Ok); }
-                catch (Exception ex) { SetMqttStatus("Fehler: " + ex.Message, MonitorState.Error); errors += "MQTT: " + ex.Message + "\r\n"; }
+                catch (Exception ex) { ErrorLogger.Log("MQTT-Verbindungstest", ex); SetMqttStatus("Fehler", MonitorState.Error); errors += "MQTT: " + ex.Message + "\r\n"; }
             }
             else SetMqttStatus("deaktiviert", MonitorState.Disabled);
             if (settings.TcpEnabled)
             {
                 SetTcpStatus("wird geprüft", MonitorState.Sending);
                 try { TcpPublisher.Publish(settings.TcpHost, settings.TcpPort, "{\"test\":true}"); SetTcpStatus("verbunden", MonitorState.Ok); }
-                catch (Exception ex) { SetTcpStatus("Fehler: " + ex.Message, MonitorState.Error); errors += "TCP: " + ex.Message + "\r\n"; }
+                catch (Exception ex) { ErrorLogger.Log("TCP-Verbindungstest", ex); SetTcpStatus("Fehler", MonitorState.Error); errors += "TCP: " + ex.Message + "\r\n"; }
             }
             else SetTcpStatus("deaktiviert", MonitorState.Disabled);
             Cursor = Cursors.Default;
             MessageBox.Show(errors.Length == 0 ? "Alle aktivierten Verbindungen wurden erfolgreich geprüft." : errors.Trim(), "Verbindungstest", MessageBoxButtons.OK, errors.Length == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
 
+        private void TestAlarmClick(object sender, EventArgs e)
+        {
+            if (!ReadFields()) return;
+            if (!settings.MqttEnabled && !settings.TcpEnabled) { MessageBox.Show("Aktivieren Sie zuerst MQTT und/oder TCP.", "Testfehler", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (TestAlarmRequested != null) TestAlarmRequested(this, EventArgs.Empty);
+        }
+
         private void PathDialogClick(object sender, EventArgs e) { if (!ReadFields()) return; using (PathSettingsForm f = new PathSettingsForm(settings)) if (f.ShowDialog(this) == DialogResult.OK) { LoadFields(); if (SettingsSaved != null) SettingsSaved(this, EventArgs.Empty); } }
-        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { trayIcon.Visible = false; trayIcon.Dispose(); } }
+        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; trayIcon.Visible = false; trayIcon.Dispose(); } }
         private void Resized(object sender, EventArgs e) { if (WindowState == FormWindowState.Minimized) Hide(); }
         private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); }
+        private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3; }
         private void SetTransportStatus(Panel panel, Label label, string name, string text, MonitorState state)
         {
             if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { SetTransportStatus(panel, label, name, text, state); }); return; }

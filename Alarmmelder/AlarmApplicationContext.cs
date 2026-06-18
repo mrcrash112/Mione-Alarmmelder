@@ -24,6 +24,7 @@ namespace MioneAlarmmelder
             main = new MainForm(settings); MainForm = main; main.FormClosed += delegate { Stop(); ExitThread(); };
             main.SettingsSaved += delegate { Restart(); };
             main.UpdateCheckRequested += delegate { CheckForUpdates(true); };
+            main.TestAlarmRequested += delegate { SendTestAlarm(); };
             main.Show(); Start(); ScheduleUpdateCheck();
         }
 
@@ -37,7 +38,7 @@ namespace MioneAlarmmelder
                 monitor.Start(); main.SetPhones(monitor.GetPhones()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
                 heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, Math.Max(10, settings.HeartbeatSeconds) * 1000);
             }
-            catch (Exception ex) { main.SetStatus(ex.Message, MonitorState.Error); }
+            catch (Exception ex) { ErrorLogger.Log("Dateiüberwachung", ex); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
 
         private void Restart() { Stop(); settings = SettingsStore.Load(); Start(); ScheduleUpdateCheck(); }
@@ -48,7 +49,7 @@ namespace MioneAlarmmelder
             Interlocked.Exchange(ref heartbeatPending, 0);
             if (monitor != null) { monitor.Dispose(); monitor = null; } dispatcher = null;
         }
-        private void MonitorStatusChanged(object sender, MonitorStatusEventArgs e) { main.SetStatus(e.Text, e.State); }
+        private void MonitorStatusChanged(object sender, MonitorStatusEventArgs e) { if (e.State == MonitorState.Error) { ErrorLogger.Log("Dateiüberwachung", e.Text); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); } else main.SetStatus(e.Text, e.State); }
         private void PhonesChanged(object sender, EventArgs e) { if (monitor != null) main.SetPhones(monitor.GetPhones()); }
         private void AlarmFound(object sender, AlarmEventArgs e)
         {
@@ -57,13 +58,29 @@ namespace MioneAlarmmelder
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Alarm " + e.Alarm.Code, MonitorState.Sending);
             if (dispatcher != null) dispatcher.Dispatch(e.Alarm, e.PhoneNumbers);
         }
+        private void SendTestAlarm()
+        {
+            if (monitor == null || dispatcher == null) { ErrorLogger.Log("Testfehler", "Überwachung oder Versand ist nicht gestartet."); main.SetStatus("Testfehler nicht möglich", MonitorState.Error); return; }
+            System.Collections.Generic.KeyValuePair<string, bool>[] phones = monitor.GetPhones();
+            System.Collections.Generic.List<string> activeNumbers = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < phones.Length; i++) if (phones[i].Value) activeNumbers.Add(phones[i].Key);
+            AlarmMessage alarm = new AlarmMessage
+            {
+                DateText = DateTime.Now.ToString("dd.MM.yy"), TimeText = DateTime.Now.ToString("HH:mm:ss"), Code = "TEST",
+                Location = "Test", CowNumber = "0", Priority = "technical", ClearText = "Dies ist ein Testfehler zur Prüfung der Alarmübertragung."
+            };
+            main.AddAlarm(alarm); main.SetStatus("Testfehler wird versendet", MonitorState.Sending);
+            if (settings.MqttEnabled) main.SetMqttStatus("sendet Testfehler", MonitorState.Sending);
+            if (settings.TcpEnabled) main.SetTcpStatus("sendet Testfehler", MonitorState.Sending);
+            dispatcher.Dispatch(alarm, activeNumbers.ToArray());
+        }
         private void DispatchCompleted(object sender, DispatchResultEventArgs e)
         {
-            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Versand erfolgreich" : "Fehler: " + e.MqttError) : "deaktiviert",
+            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Versand erfolgreich" : "Fehler") : "deaktiviert",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
-            main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Versand erfolgreich" : "Fehler: " + e.TcpError) : "deaktiviert",
+            main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Versand erfolgreich" : "Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
-            if (e.Error.Length > 0) main.SetStatus(e.Error, MonitorState.Error);
+            if (e.Error.Length > 0) { ErrorLogger.Log("Alarmversand", e.Error); main.SetStatus("Versandfehler - siehe Fehlerprotokoll", MonitorState.Error); }
             else main.SetStatus(e.SentCount + " Nachricht(en) erfolgreich versendet", MonitorState.Ok);
         }
         private void HeartbeatTick(object state)
@@ -77,11 +94,11 @@ namespace MioneAlarmmelder
         private void HeartbeatCompleted(object sender, DispatchResultEventArgs e)
         {
             Interlocked.Exchange(ref heartbeatPending, 0);
-            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler: " + e.MqttError) : "deaktiviert",
+            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
-            main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler: " + e.TcpError) : "deaktiviert",
+            main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
-            if (e.Error.Length > 0) main.SetStatus(e.Error, MonitorState.Error);
+            if (e.Error.Length > 0) { ErrorLogger.Log("Heartbeat", e.Error); main.SetStatus("Heartbeat-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
         private void ScheduleUpdateCheck()
         {
@@ -101,6 +118,7 @@ namespace MioneAlarmmelder
                 {
                     if (!String.IsNullOrEmpty(result.Error))
                     {
+                        ErrorLogger.Log("GitHub-Update", result.Error);
                         main.SetUpdateStatus("Updateprüfung fehlgeschlagen: " + result.Error);
                         if (manual) MessageBox.Show(result.Error, "Updateprüfung fehlgeschlagen", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
@@ -126,6 +144,7 @@ namespace MioneAlarmmelder
                 {
                     if (!String.IsNullOrEmpty(error))
                     {
+                        ErrorLogger.Log("GitHub-Update", error);
                         main.SetUpdateStatus("Installation fehlgeschlagen: " + error);
                         MessageBox.Show(error, "Update fehlgeschlagen", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }

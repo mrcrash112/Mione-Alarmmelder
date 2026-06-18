@@ -5,16 +5,17 @@ namespace MioneAlarmmelder.Forms
 {
     partial class MainForm
     {
-        private PictureBox logoPicture; private Label titleLabel; private Label statusLabel; private Panel ledPanel;
+        private PictureBox logoPicture; private Label titleLabel, versionLabel; private Label statusLabel; private Panel ledPanel;
         private Label mqttStatusLabel, tcpStatusLabel; private Panel mqttLedPanel, tcpLedPanel;
         private TabControl tabs; private ListView alarmList; private ListView phoneList;
         private TextBox messagePathBox, alarmSettingsPathBox, priorityPathBox, translationPathBox;
         private CheckBox mqttEnabledBox, tcpEnabledBox, startupBox;
         private TextBox mqttHostBox, mqttPortBox, mqttTopicBox, mqttUserBox, mqttPasswordBox;
         private TextBox tcpHostBox, tcpPortBox, customerBox, pollBox, heartbeatBox;
-        private Button saveButton, testButton, pathDialogButton;
+        private Button saveButton, testButton, testAlarmButton, pathDialogButton;
         private CheckBox updateEnabledBox; private TextBox updateRepositoryBox, updateAssetBox;
         private Label updateStatusLabel, currentVersionLabel; private Button updateCheckButton;
+        private ListView errorList; private Button errorRefreshButton, errorClearButton; private Label errorPathLabel;
 
         private void InitializeComponent()
         {
@@ -22,6 +23,7 @@ namespace MioneAlarmmelder.Forms
             ClientSize = new Size(850, 600); MinimumSize = new Size(780, 560);
             logoPicture = new PictureBox(); logoPicture.Location = new Point(12, 8); logoPicture.Size = new Size(74, 74); logoPicture.SizeMode = PictureBoxSizeMode.Zoom;
             titleLabel = new Label(); titleLabel.Text = "Mione Alarmmelder"; titleLabel.Font = new Font("Segoe UI", 16F, FontStyle.Bold); titleLabel.Location = new Point(100, 18); titleLabel.AutoSize = true;
+            versionLabel = new Label(); versionLabel.Text = "Version"; versionLabel.Location = new Point(325, 28); versionLabel.Size = new Size(170, 20); versionLabel.ForeColor = Color.DimGray;
             statusLabel = new Label(); statusLabel.Text = "Wird gestartet ..."; statusLabel.Location = new Point(125, 56); statusLabel.AutoSize = true;
             ledPanel = new Panel(); ledPanel.Location = new Point(104, 54); ledPanel.Size = new Size(14, 14); ledPanel.BackColor = Color.Goldenrod;
             mqttLedPanel = new Panel(); mqttLedPanel.Location = new Point(515, 25); mqttLedPanel.Size = new Size(14, 14); mqttLedPanel.BackColor = Color.Gray;
@@ -29,9 +31,9 @@ namespace MioneAlarmmelder.Forms
             tcpLedPanel = new Panel(); tcpLedPanel.Location = new Point(515, 54); tcpLedPanel.Size = new Size(14, 14); tcpLedPanel.BackColor = Color.Gray;
             tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 53); tcpStatusLabel.Size = new Size(285, 20);
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 90); tabs.Size = new Size(826, 452);
-            TabPage overview = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage updates = new TabPage("Updates");
+            TabPage overview = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             alarmList = new ListView(); alarmList.Dock = DockStyle.Fill; alarmList.View = View.Details; alarmList.FullRowSelect = true; alarmList.GridLines = true;
-            alarmList.Columns.Add("Zeit", 120); alarmList.Columns.Add("Code", 65); alarmList.Columns.Add("Ort", 115); alarmList.Columns.Add("Priorität", 90); alarmList.Columns.Add("Alarmtext", 380);
+            alarmList.Columns.Add("Zeit", 120); alarmList.Columns.Add("Code", 60); alarmList.Columns.Add("Ort", 105); alarmList.Columns.Add("Kuh", 85); alarmList.Columns.Add("Priorität", 85); alarmList.Columns.Add("Alarmtext", 320);
             overview.Controls.Add(alarmList);
             messagePathBox = AddPath(paths, "Alarmdatei", 24); alarmSettingsPathBox = AddPath(paths, "Alarm-Einstellungen", 78);
             priorityPathBox = AddPath(paths, "Alarm-Prioritäten", 132); translationPathBox = AddPath(paths, "Übersetzungen", 186);
@@ -44,10 +46,11 @@ namespace MioneAlarmmelder.Forms
             GroupBox tcp = new GroupBox(); tcp.Text = "TCP-Socket (JSON + Zeilenumbruch)"; tcp.Location = new Point(415, 12); tcp.Size = new Size(385, 220);
             tcpEnabledBox = AddCheck(tcp, "TCP-Versand aktiv", 20); tcpHostBox = AddField(tcp, "Server / IP", 58); tcpPortBox = AddField(tcp, "Port", 98);
             heartbeatBox = AddField(tcp, "Heartbeat (s)", 138);
+            testAlarmButton = new Button(); testAlarmButton.Text = "Testfehler senden"; testAlarmButton.Location = new Point(650, 400); testAlarmButton.Size = new Size(150, 28); testAlarmButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             testButton = new Button(); testButton.Text = "Verbindung testen"; testButton.Location = new Point(225, 175); testButton.Size = new Size(135, 30); tcp.Controls.Add(testButton);
             phoneList = new ListView(); phoneList.View = View.Details; phoneList.FullRowSelect = true; phoneList.Location = new Point(415, 245); phoneList.Size = new Size(385, 152);
             phoneList.Columns.Add("Rufnummer", 245); phoneList.Columns.Add("Aktiv", 100);
-            transport.Controls.Add(mqtt); transport.Controls.Add(tcp); transport.Controls.Add(phoneList);
+            transport.Controls.Add(mqtt); transport.Controls.Add(tcp); transport.Controls.Add(phoneList); transport.Controls.Add(testAlarmButton);
             updateEnabledBox = AddCheck(updates, "Beim Start automatisch nach Updates suchen", 25);
             updateRepositoryBox = AddUpdateField(updates, "GitHub-Repository", 75); updateAssetBox = AddUpdateField(updates, "Release-Datei", 120);
             currentVersionLabel = new Label(); currentVersionLabel.Location = new Point(18, 178); currentVersionLabel.Size = new Size(740, 22);
@@ -55,9 +58,16 @@ namespace MioneAlarmmelder.Forms
             updateCheckButton = new Button(); updateCheckButton.Text = "Jetzt nach Updates suchen"; updateCheckButton.Location = new Point(570, 300); updateCheckButton.Size = new Size(220, 32);
             Label updateHelp = new Label(); updateHelp.Location = new Point(18, 350); updateHelp.Size = new Size(760, 50); updateHelp.Text = "Im neuesten öffentlichen GitHub-Release muss die angegebene EXE als Asset hinterlegt sein. Der Release-Tag muss z. B. v1.1.0 lauten.";
             updates.Controls.Add(currentVersionLabel); updates.Controls.Add(updateStatusLabel); updates.Controls.Add(updateCheckButton); updates.Controls.Add(updateHelp);
-            tabs.TabPages.Add(overview); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(updates);
-            saveButton = new Button(); saveButton.Text = "Einstellungen speichern"; saveButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; saveButton.Location = new Point(650, 555); saveButton.Size = new Size(188, 32);
-            Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);
+            errorList = new ListView(); errorList.View = View.Details; errorList.FullRowSelect = true; errorList.GridLines = true;
+            errorList.Location = new Point(12, 12); errorList.Size = new Size(790, 330); errorList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            errorList.Columns.Add("Zeit", 145); errorList.Columns.Add("Quelle", 130); errorList.Columns.Add("Fehlermeldung", 490);
+            errorPathLabel = new Label(); errorPathLabel.Location = new Point(12, 352); errorPathLabel.Size = new Size(540, 42); errorPathLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            errorRefreshButton = new Button(); errorRefreshButton.Text = "Aktualisieren"; errorRefreshButton.Location = new Point(565, 365); errorRefreshButton.Size = new Size(110, 30); errorRefreshButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            errorClearButton = new Button(); errorClearButton.Text = "Protokoll löschen"; errorClearButton.Location = new Point(684, 365); errorClearButton.Size = new Size(118, 30); errorClearButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            errors.Controls.Add(errorList); errors.Controls.Add(errorPathLabel); errors.Controls.Add(errorRefreshButton); errors.Controls.Add(errorClearButton);
+            tabs.TabPages.Add(overview); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(updates); tabs.TabPages.Add(errors);
+            saveButton = new Button(); saveButton.Text = "Einstellungen speichern"; saveButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; saveButton.Location = new Point(650, 555); saveButton.Size = new Size(188, 32); saveButton.Visible = false;
+            Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(versionLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);
             Controls.Add(mqttLedPanel); Controls.Add(mqttStatusLabel); Controls.Add(tcpLedPanel); Controls.Add(tcpStatusLabel);
             Controls.Add(tabs); Controls.Add(saveButton);
             ResumeLayout(false); PerformLayout();

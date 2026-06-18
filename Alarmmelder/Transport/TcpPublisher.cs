@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
@@ -19,10 +20,21 @@ namespace MioneAlarmmelder.Transport
 
         internal static TcpClient Connect(string host, int port, int timeout)
         {
-            TcpClient client = new TcpClient();
-            IAsyncResult result = client.BeginConnect(host, port, null, null);
-            if (!result.AsyncWaitHandle.WaitOne(timeout, false)) { client.Close(); throw new IOException("Zeitüberschreitung beim Verbindungsaufbau zu " + host); }
-            client.EndConnect(result); return client;
+            IPAddress[] addresses = Dns.GetHostAddresses(host); Exception lastError = null;
+            for (int i = 0; i < addresses.Length; i++)
+            {
+                if (addresses[i].AddressFamily != AddressFamily.InterNetwork && addresses[i].AddressFamily != AddressFamily.InterNetworkV6) continue;
+                TcpClient client = null;
+                try
+                {
+                    client = new TcpClient(addresses[i].AddressFamily);
+                    IAsyncResult result = client.BeginConnect(addresses[i], port, null, null);
+                    if (!result.AsyncWaitHandle.WaitOne(timeout, false)) throw new IOException("Zeitüberschreitung bei " + addresses[i]);
+                    client.EndConnect(result); return client;
+                }
+                catch (Exception ex) { lastError = ex; if (client != null) client.Close(); }
+            }
+            throw new IOException("Verbindung zu " + host + " über IPv4 oder IPv6 fehlgeschlagen.", lastError);
         }
     }
 }

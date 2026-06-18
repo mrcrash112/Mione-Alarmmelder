@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Mione Alarmmelder: Release kompilieren",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/build-release-mac.sh"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

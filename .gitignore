@@ -1,0 +1,7 @@
+Alarmmelder/bin/
+Alarmmelder/obj/
+*.suo
+*.user
+*.userprefs
+.vs/
+.DS_Store

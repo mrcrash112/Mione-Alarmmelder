@@ -1,0 +1,5 @@
+{
+  "dotnet.server.useOmnisharp": true,
+  "omnisharp.useModernNet": false,
+  "omnisharp.monoPath": "/opt/homebrew/bin/mono"
+}

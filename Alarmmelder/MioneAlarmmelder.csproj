@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A139FF16-F06A-4BE5-AF0D-52719527477B}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>MioneAlarmmelder</RootNamespace>
+    <AssemblyName>MioneAlarmmelder</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ApplicationIcon />
+    <StartupObject>MioneAlarmmelder.Program</StartupObject>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols><DebugType>full</DebugType><Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath><DefineConstants>DEBUG;TRACE</DefineConstants><WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants><WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Data" />
+    <Reference Include="System.Drawing" /><Reference Include="System.Security" /><Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" /><Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" /><Compile Include="AlarmApplicationContext.cs" />
+    <Compile Include="Core\AlarmMessage.cs" /><Compile Include="Core\AppSettings.cs" />
+    <Compile Include="Core\EmbeddedImages.cs" />
+    <Compile Include="Core\FileMonitorService.cs" /><Compile Include="Core\PropertiesFile.cs" />
+    <Compile Include="Core\SettingsStore.cs" /><Compile Include="Core\StartupRegistration.cs" />
+    <Compile Include="Core\GitHubUpdateService.cs" />
+    <Compile Include="Transport\AlarmDispatcher.cs" /><Compile Include="Transport\MqttPublisher.cs" />
+    <Compile Include="Transport\TcpPublisher.cs" />
+    <Compile Include="Forms\MainForm.cs"><SubType>Form</SubType></Compile>
+    <Compile Include="Forms\MainForm.Designer.cs"><DependentUpon>MainForm.cs</DependentUpon></Compile>
+    <Compile Include="Forms\PathSettingsForm.cs"><SubType>Form</SubType></Compile>
+    <Compile Include="Forms\SplashForm.cs"><SubType>Form</SubType></Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <EmbeddedResource Include="Assets\logo.png"><LogicalName>MioneAlarmmelder.Assets.logo.png</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="Assets\Banner.png"><LogicalName>MioneAlarmmelder.Assets.Banner.png</LogicalName></EmbeddedResource>
+    <Content Include="Assets\translations_de.properties"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

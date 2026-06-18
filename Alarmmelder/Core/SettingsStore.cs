@@ -1,0 +1,79 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Xml;
+
+namespace MioneAlarmmelder.Core
+{
+    public static class SettingsStore
+    {
+        private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MioneAlarmmelder");
+        private static readonly string FileName = Path.Combine(Folder, "settings.xml");
+
+        public static AppSettings Load()
+        {
+            AppSettings s = AppSettings.CreateDefault();
+            if (!File.Exists(FileName)) return s;
+            try
+            {
+                XmlDocument d = new XmlDocument(); d.Load(FileName);
+                s.MessageLogPath = Get(d, "MessageLogPath", s.MessageLogPath);
+                s.AlarmSettingsPath = Get(d, "AlarmSettingsPath", s.AlarmSettingsPath);
+                s.PriorityPath = Get(d, "PriorityPath", s.PriorityPath);
+                s.TranslationPath = Get(d, "TranslationPath", s.TranslationPath);
+                s.MqttEnabled = GetBool(d, "MqttEnabled", false); s.MqttHost = Get(d, "MqttHost", "");
+                s.MqttPort = GetInt(d, "MqttPort", 1883); s.MqttTopic = Get(d, "MqttTopic", s.MqttTopic);
+                s.MqttUser = Get(d, "MqttUser", ""); s.MqttPassword = Unprotect(Get(d, "MqttPassword", ""));
+                s.TcpEnabled = GetBool(d, "TcpEnabled", false); s.TcpHost = Get(d, "TcpHost", "");
+                s.TcpPort = GetInt(d, "TcpPort", 5000); s.CustomerId = Get(d, "CustomerId", "");
+                s.PollSeconds = Math.Max(1, GetInt(d, "PollSeconds", 2));
+                s.HeartbeatSeconds = Math.Max(10, GetInt(d, "HeartbeatSeconds", 60));
+                s.StartWithWindows = GetBool(d, "StartWithWindows", false);
+                s.UpdateEnabled = GetBool(d, "UpdateEnabled", true);
+                s.UpdateRepository = Get(d, "UpdateRepository", "mrcrash112/Mione-Alarmmelder");
+                s.UpdateAssetName = Get(d, "UpdateAssetName", "MioneAlarmmelder.exe");
+                MigrateOldDefaults(s);
+            }
+            catch { return AppSettings.CreateDefault(); }
+            return s;
+        }
+
+        public static void Save(AppSettings s)
+        {
+            if (!Directory.Exists(Folder)) Directory.CreateDirectory(Folder);
+            XmlWriterSettings ws = new XmlWriterSettings(); ws.Indent = true; ws.Encoding = Encoding.UTF8;
+            using (XmlWriter w = XmlWriter.Create(FileName, ws))
+            {
+                w.WriteStartElement("settings");
+                Write(w, "MessageLogPath", s.MessageLogPath); Write(w, "AlarmSettingsPath", s.AlarmSettingsPath);
+                Write(w, "PriorityPath", s.PriorityPath); Write(w, "TranslationPath", s.TranslationPath);
+                Write(w, "MqttEnabled", s.MqttEnabled.ToString()); Write(w, "MqttHost", s.MqttHost);
+                Write(w, "MqttPort", s.MqttPort.ToString()); Write(w, "MqttTopic", s.MqttTopic);
+                Write(w, "MqttUser", s.MqttUser); Write(w, "MqttPassword", Protect(s.MqttPassword));
+                Write(w, "TcpEnabled", s.TcpEnabled.ToString()); Write(w, "TcpHost", s.TcpHost);
+                Write(w, "TcpPort", s.TcpPort.ToString()); Write(w, "CustomerId", s.CustomerId);
+                Write(w, "PollSeconds", s.PollSeconds.ToString()); Write(w, "HeartbeatSeconds", s.HeartbeatSeconds.ToString());
+                Write(w, "StartWithWindows", s.StartWithWindows.ToString());
+                Write(w, "UpdateEnabled", s.UpdateEnabled.ToString()); Write(w, "UpdateRepository", s.UpdateRepository);
+                Write(w, "UpdateAssetName", s.UpdateAssetName);
+                w.WriteEndElement();
+            }
+        }
+
+        private static string Get(XmlDocument d, string name, string fallback) { XmlNode n = d.SelectSingleNode("/settings/" + name); return n == null ? fallback : n.InnerText; }
+        private static bool GetBool(XmlDocument d, string n, bool f) { bool v; return Boolean.TryParse(Get(d, n, ""), out v) ? v : f; }
+        private static int GetInt(XmlDocument d, string n, int f) { int v; return Int32.TryParse(Get(d, n, ""), out v) ? v : f; }
+        private static void Write(XmlWriter w, string n, string v) { w.WriteElementString(n, v ?? ""); }
+        private static string Protect(string value) { if (String.IsNullOrEmpty(value)) return ""; return Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser)); }
+        private static string Unprotect(string value) { try { return String.IsNullOrEmpty(value) ? "" : Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), null, DataProtectionScope.CurrentUser)); } catch { return ""; } }
+        private static void MigrateOldDefaults(AppSettings s)
+        {
+            if (String.Equals(s.MessageLogPath, @"D:\Dairyplan\MessagesLog_1.adf", StringComparison.OrdinalIgnoreCase)) s.MessageLogPath = @"D:\DairyPln\MessageLog_1.adf";
+            if (String.Equals(s.AlarmSettingsPath, @"D:\DairyPln\RDM\configuration\preferences\user\alarmsettings", StringComparison.OrdinalIgnoreCase)) s.AlarmSettingsPath = @"D:\DairyPln\RDM\configuration\preferences\user\alarmssettings.properties";
+            if (String.Equals(s.PriorityPath, @"D:\DairyPln\RDM\configuration\data\rdm\useralarmpriorities", StringComparison.OrdinalIgnoreCase)) s.PriorityPath = @"D:\DairyPln\RDM\configuration\data\rdm\useralarmpriorities.properties";
+            string oldTranslation = Path.Combine(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets"), "translations_de.properties");
+            if (String.Equals(s.TranslationPath, oldTranslation, StringComparison.OrdinalIgnoreCase)) s.TranslationPath = @"D:\Release\Assets\translations_de.properties";
+        }
+    }
+}

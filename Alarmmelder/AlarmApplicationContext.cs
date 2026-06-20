@@ -57,6 +57,7 @@ namespace MioneAlarmmelder
                 {
                     milkingRobotPublisher = new MilkingRobotPublisher(settings);
                     milkingRobotCommandSubscriber = new MilkingRobotCommandSubscriber(settings);
+                    milkingRobotCommandSubscriber.CommandReceived += MilkingRobotCommandReceived;
                     milkingRobotCommandSubscriber.Start();
                     int robotInterval = Math.Max(5, settings.DpProcessPollSeconds) * 1000;
                     milkingRobotTimer = new System.Threading.Timer(MilkingRobotTick, null, 3000, robotInterval);
@@ -200,6 +201,10 @@ namespace MioneAlarmmelder
             if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
+        }
+        private void MilkingRobotCommandReceived(object sender, MilkingRobotCommandEventArgs e)
+        {
+            main.AddMilkingRobotCommand(e);
         }
         private void MilkingRobotTick(object state)
         {

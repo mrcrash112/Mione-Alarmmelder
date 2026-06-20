@@ -40,6 +40,8 @@ namespace MioneAlarmmelder.Forms
             urgentTestAlarmButton.Click += delegate { if (UrgentTestAlarmRequested != null) UrgentTestAlarmRequested(this, EventArgs.Empty); };
             updateCheckButton.Click += delegate { if (ReadFields() && UpdateCheckRequested != null) UpdateCheckRequested(this, EventArgs.Empty); };
             dpProcessCheckButton.Click += delegate { RenderDpProcessFiles(); };
+            robotCommandClearButton.Click += delegate { robotCommandList.Items.Clear(); robotCommandPayloadBox.Clear(); };
+            robotCommandList.SelectedIndexChanged += RobotCommandSelectionChanged;
             errorRefreshButton.Click += delegate { LoadErrorLog(); };
             errorClearButton.Click += ErrorClearClick;
             ErrorLogger.ErrorLogged += ErrorWasLogged;
@@ -412,10 +414,46 @@ namespace MioneAlarmmelder.Forms
             alarmProgressForm.UpdateProgress(value);
         }
 
+        public void AddMilkingRobotCommand(MilkingRobotCommandEventArgs value)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action<MilkingRobotCommandEventArgs>(AddMilkingRobotCommand), value); return; }
+            if (value == null || robotCommandList == null) return;
+            MilkingRobotCommand command = value.Command;
+            string parameters = "";
+            if (command != null)
+            {
+                if (!String.IsNullOrEmpty(command.BoxNumber)) parameters += "box=" + command.BoxNumber;
+                if (!String.IsNullOrEmpty(command.RobotPosition)) parameters += (parameters.Length > 0 ? ", " : "") + "position=" + command.RobotPosition;
+                if (!String.IsNullOrEmpty(command.SamplingBox)) parameters += (parameters.Length > 0 ? ", " : "") + "sampling=" + command.SamplingBox;
+            }
+            ListViewItem item = new ListViewItem(value.Time.ToString("HH:mm:ss"));
+            item.SubItems.Add(value.ReceivedTopic);
+            item.SubItems.Add(command == null ? "" : command.Name);
+            item.SubItems.Add(parameters);
+            item.SubItems.Add(value.State);
+            item.SubItems.Add(value.ResultPublished ? "gesendet" : "Fehler");
+            item.SubItems.Add(value.Message);
+            item.Tag = "Empfangen von " + value.ReceivedTopic + Environment.NewLine + value.Payload + Environment.NewLine + Environment.NewLine +
+                "Result nach " + value.ResultTopic + " (" + (value.ResultPublished ? "gesendet" : "nicht gesendet") + ")" + Environment.NewLine + value.ResultPayload;
+            item.BackColor = value.ResultPublished && String.Equals(value.State, "pendingNativeBridge", StringComparison.OrdinalIgnoreCase) ? Color.LightYellow :
+                value.ResultPublished && String.Equals(value.State, "invalidParameters", StringComparison.OrdinalIgnoreCase) ? Color.MistyRose :
+                value.ResultPublished && String.Equals(value.State, "invalidCommand", StringComparison.OrdinalIgnoreCase) ? Color.MistyRose :
+                value.ResultPublished ? Color.White : Color.LightCoral;
+            robotCommandList.Items.Insert(0, item);
+            while (robotCommandList.Items.Count > 300) robotCommandList.Items.RemoveAt(robotCommandList.Items.Count - 1);
+            robotCommandPayloadBox.Text = item.Tag as string;
+        }
+
+        private void RobotCommandSelectionChanged(object sender, EventArgs e)
+        {
+            if (robotCommandList.SelectedItems.Count == 0) return;
+            robotCommandPayloadBox.Text = robotCommandList.SelectedItems[0].Tag as string;
+        }
+
         private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; if (alarmToolTip != null) alarmToolTip.Dispose(); if (alarmProgressForm != null) alarmProgressForm.Dispose(); if (errorListMenu != null) errorListMenu.Dispose(); trayIcon.Visible = false; trayIcon.Dispose(); } }
         private void Resized(object sender, EventArgs e) { if (WindowState == FormWindowState.Minimized) Hide(); }
         private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); }
-        private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3 || tabs.SelectedIndex == 4; }
+        private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3 || tabs.SelectedIndex == 5; }
         private void DrawTab(object sender, DrawItemEventArgs e)
         {
             Rectangle bounds = tabs.GetTabRect(e.Index);

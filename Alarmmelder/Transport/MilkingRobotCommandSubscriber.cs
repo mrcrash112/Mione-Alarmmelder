@@ -15,6 +15,7 @@ namespace MioneAlarmmelder.Transport
         private volatile bool stopping;
         private Thread worker;
         private TcpClient activeClient;
+        public event EventHandler<MilkingRobotCommandEventArgs> CommandReceived;
 
         public MilkingRobotCommandSubscriber(AppSettings settings) { this.settings = settings; }
 
@@ -42,8 +43,8 @@ namespace MioneAlarmmelder.Transport
                 activeClient = client; client.ReceiveTimeout = 5000; client.SendTimeout = 5000;
                 SendConnect(stream); byte header; byte[] body; ReadPacket(stream, out header, out body);
                 if ((header >> 4) != 2 || body.Length < 2 || body[1] != 0) throw new IOException("MQTT-Anmeldung für Melkroboter-Befehle abgelehnt.");
-                SendSubscribe(stream, new string[] { Topic("Melkroboter/Command"), Topic("Melkroboter/Befehl") }); ReadPacket(stream, out header, out body);
-                if ((header >> 4) != 9) throw new IOException("MQTT-Melkroboter-Befehle konnten nicht abonniert werden.");
+                SendSubscribe(stream, new string[] { Topic("Melkroboter/Command"), Topic("Melkroboter/Befehl") });
+                WaitForSubscribeAck(stream);
                 client.ReceiveTimeout = 60000;
                 while (!stopping)
                 {
@@ -61,25 +62,60 @@ namespace MioneAlarmmelder.Transport
             }
         }
 
+        private void WaitForSubscribeAck(NetworkStream stream)
+        {
+            byte header; byte[] body; DateTime until = DateTime.UtcNow.AddSeconds(5);
+            while (DateTime.UtcNow <= until)
+            {
+                ReadPacket(stream, out header, out body);
+                if ((header >> 4) == 9) return;
+                if ((header >> 4) == 3) HandlePublish(header, body);
+            }
+            throw new IOException("MQTT-Melkroboter-Befehle konnten nicht abonniert werden.");
+        }
+
         private void HandlePublish(byte header, byte[] body)
         {
             if (body.Length < 2) return;
             int topicLength = (body[0] << 8) | body[1];
             int offset = 2 + topicLength + (((header >> 1) & 3) > 0 ? 2 : 0);
             if (topicLength < 1 || offset > body.Length) return;
+            string topic = Encoding.UTF8.GetString(body, 2, topicLength);
             string payload = Encoding.UTF8.GetString(body, offset, body.Length - offset);
             MilkingRobotCommand command = MilkingRobotCommand.Parse(payload);
-            string result = Execute(command);
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, Topic("Melkroboter/Result"), result, false);
+            bool ok; string state; string message;
+            string result = Execute(command, out ok, out state, out message);
+            string resultTopic = Topic("Melkroboter/Result");
+            bool resultPublished = false;
+            try
+            {
+                MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, resultTopic, result, false);
+                resultPublished = true;
+            }
+            catch (Exception ex)
+            {
+                state = "publishError";
+                message = "Result konnte nicht an MQTT gesendet werden: " + ex.Message;
+                ErrorLogger.Log("Melkroboter-MQTT-Result", ex);
+            }
+            OnCommandReceived(new MilkingRobotCommandEventArgs(DateTime.Now, topic, resultTopic, command, ok, state, message, resultPublished, payload, result));
         }
 
-        private string Execute(MilkingRobotCommand command)
+        private string Execute(MilkingRobotCommand command, out bool ok, out string state, out string message)
         {
             bool valid = MilkingRobotPublisher.IsKnownFunction(command.Name);
-            if (!valid) return MilkingRobotPublisher.BuildCommandResultJson(command, false, "invalidCommand", "Unbekannte Melkroboter-Funktion.");
+            ok = false;
+            if (!valid) { state = "invalidCommand"; message = "Unbekannte Melkroboter-Funktion."; return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message); }
             string missing = MissingParameter(command);
-            if (missing.Length > 0) return MilkingRobotPublisher.BuildCommandResultJson(command, false, "invalidParameters", "Parameter fehlt: " + missing);
-            return MilkingRobotPublisher.BuildCommandResultJson(command, false, "pendingNativeBridge", "Native DPProcessControl-Uebergabe ist noch nicht aktiv. Befehl wurde empfangen und validiert.");
+            if (missing.Length > 0) { state = "invalidParameters"; message = "Parameter fehlt: " + missing; return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message); }
+            state = "pendingNativeBridge"; message = "Native DPProcessControl-Uebergabe ist noch nicht aktiv. Befehl wurde empfangen und validiert.";
+            return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message);
+        }
+
+        private void OnCommandReceived(MilkingRobotCommandEventArgs e)
+        {
+            EventHandler<MilkingRobotCommandEventArgs> handler = CommandReceived;
+            if (handler != null) handler(this, e);
         }
 
         private static string MissingParameter(MilkingRobotCommand command)
@@ -191,6 +227,25 @@ namespace MioneAlarmmelder.Transport
         private static string Text(Dictionary<string, object> values, string key)
         {
             object value; return values.TryGetValue(key, out value) && value != null ? value.ToString() : "";
+        }
+    }
+
+    public sealed class MilkingRobotCommandEventArgs : EventArgs
+    {
+        public DateTime Time { get; private set; }
+        public string ReceivedTopic { get; private set; }
+        public string ResultTopic { get; private set; }
+        public MilkingRobotCommand Command { get; private set; }
+        public bool Ok { get; private set; }
+        public string State { get; private set; }
+        public string Message { get; private set; }
+        public bool ResultPublished { get; private set; }
+        public string Payload { get; private set; }
+        public string ResultPayload { get; private set; }
+
+        public MilkingRobotCommandEventArgs(DateTime time, string receivedTopic, string resultTopic, MilkingRobotCommand command, bool ok, string state, string message, bool resultPublished, string payload, string resultPayload)
+        {
+            Time = time; ReceivedTopic = receivedTopic; ResultTopic = resultTopic; Command = command; Ok = ok; State = state; Message = message; ResultPublished = resultPublished; Payload = payload; ResultPayload = resultPayload;
         }
     }
 }

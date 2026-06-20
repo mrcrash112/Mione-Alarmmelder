@@ -16,6 +16,7 @@ namespace MioneAlarmmelder.Forms
         private CheckBox updateEnabledBox; private TextBox updateRepositoryBox, updateAssetBox, updateIntervalBox; private ComboBox updateChannelBox;
         private Label updateStatusLabel; private Button updateCheckButton;
         private CheckBox dpProcessEnabledBox; private TextBox dpProcessPathBox, dpProcessPollBox; private Button dpProcessCheckButton; private ListView dpProcessFileList; private Label dpProcessTopicLabel;
+        private ListView robotCommandList; private TextBox robotCommandPayloadBox; private Button robotCommandClearButton;
         private TabPage overviewPage;
         private ComboBox alarmViewFilter, alarmPriorityFilter; private Button acknowledgeSelectedButton, acknowledgeAllButton; private NumericUpDown alarmLimitBox;
         private ListView errorList; private Button errorRefreshButton, errorClearButton, errorAcknowledgeSelectedButton, errorAcknowledgeAllButton; private Label errorPathLabel; private ComboBox errorViewFilter; private NumericUpDown errorLimitBox;
@@ -38,7 +39,7 @@ namespace MioneAlarmmelder.Forms
             firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
             firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 108); tabs.Size = new Size(826, 434);
-            overviewPage = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
+            overviewPage = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage robotCommands = new TabPage("Funktionslog"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
             alarmList = new ListView(); alarmList.Dock = DockStyle.Fill; alarmList.View = View.Details; alarmList.FullRowSelect = true; alarmList.GridLines = true;
             alarmList.Columns.Add("Zeit", 120); alarmList.Columns.Add("Code", 60); alarmList.Columns.Add("Ort", 105); alarmList.Columns.Add("Kuh", 85); alarmList.Columns.Add("Priorität", 85); alarmList.Columns.Add("Alarmtext", 320);
@@ -82,6 +83,14 @@ namespace MioneAlarmmelder.Forms
             dpProcessFileList.Columns.Add("Status", 70); dpProcessFileList.Columns.Add("Datei", 230); dpProcessFileList.Columns.Add("Pfad", 430);
             dpProcessCheckButton = new Button(); dpProcessCheckButton.Text = "Pfade prüfen"; dpProcessCheckButton.Location = new Point(650, 365); dpProcessCheckButton.Size = new Size(128, 30); dpProcessCheckButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             dpProcess.Controls.Add(dpProcessEnabledBox); dpProcess.Controls.Add(dpProcessPathBox); dpProcess.Controls.Add(dpProcessPollBox); dpProcess.Controls.Add(dpProcessTopicLabel); dpProcess.Controls.Add(dpProcessFileList); dpProcess.Controls.Add(dpProcessCheckButton);
+            robotCommandList = new ListView(); robotCommandList.View = View.Details; robotCommandList.FullRowSelect = true; robotCommandList.GridLines = true;
+            robotCommandList.Location = new Point(12, 12); robotCommandList.Size = new Size(790, 245); robotCommandList.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            robotCommandList.Columns.Add("Zeit", 82); robotCommandList.Columns.Add("Empfang", 175); robotCommandList.Columns.Add("Funktion", 145); robotCommandList.Columns.Add("Parameter", 135); robotCommandList.Columns.Add("Status", 130); robotCommandList.Columns.Add("Result", 65); robotCommandList.Columns.Add("Meldung", 300);
+            Label robotCommandPayloadLabel = new Label(); robotCommandPayloadLabel.Text = "Payload / Result:"; robotCommandPayloadLabel.Location = new Point(12, 268); robotCommandPayloadLabel.Size = new Size(120, 20); robotCommandPayloadLabel.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+            robotCommandPayloadBox = new TextBox(); robotCommandPayloadBox.Multiline = true; robotCommandPayloadBox.ScrollBars = ScrollBars.Both; robotCommandPayloadBox.ReadOnly = true; robotCommandPayloadBox.WordWrap = false;
+            robotCommandPayloadBox.Location = new Point(12, 292); robotCommandPayloadBox.Size = new Size(650, 102); robotCommandPayloadBox.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+            robotCommandClearButton = new Button(); robotCommandClearButton.Text = "Liste löschen"; robotCommandClearButton.Location = new Point(678, 364); robotCommandClearButton.Size = new Size(124, 30); robotCommandClearButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+            robotCommands.Controls.Add(robotCommandList); robotCommands.Controls.Add(robotCommandPayloadLabel); robotCommands.Controls.Add(robotCommandPayloadBox); robotCommands.Controls.Add(robotCommandClearButton);
             updateEnabledBox = AddCheck(updates, "Beim Start automatisch nach Updates suchen", 25);
             updateRepositoryBox = AddUpdateField(updates, "GitHub-Repository", 75); updateAssetBox = AddUpdateField(updates, "Release-Datei", 120);
             updateIntervalBox = AddUpdateField(updates, "Prüfintervall (Min.)", 165);
@@ -108,7 +117,7 @@ namespace MioneAlarmmelder.Forms
             errorRefreshButton = new Button(); errorRefreshButton.Text = "Aktualisieren"; errorRefreshButton.Location = new Point(565, 365); errorRefreshButton.Size = new Size(110, 30); errorRefreshButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             errorClearButton = new Button(); errorClearButton.Text = "Protokoll löschen"; errorClearButton.Location = new Point(684, 365); errorClearButton.Size = new Size(118, 30); errorClearButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             errors.Controls.Add(errorList); errors.Controls.Add(errorTools); errors.Controls.Add(errorPathLabel); errors.Controls.Add(errorRefreshButton); errors.Controls.Add(errorClearButton);
-            tabs.TabPages.Add(overviewPage); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(dpProcess); tabs.TabPages.Add(updates); tabs.TabPages.Add(errors);
+            tabs.TabPages.Add(overviewPage); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(dpProcess); tabs.TabPages.Add(robotCommands); tabs.TabPages.Add(updates); tabs.TabPages.Add(errors);
             saveButton = new Button(); saveButton.Text = "Einstellungen speichern"; saveButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; saveButton.Location = new Point(650, 555); saveButton.Size = new Size(188, 32); saveButton.Visible = false;
             infoButton = new Button(); infoButton.Text = "Info"; infoButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; infoButton.Location = new Point(12, 555); infoButton.Size = new Size(100, 32);
             Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(versionLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);

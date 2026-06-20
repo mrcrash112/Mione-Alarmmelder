@@ -103,6 +103,9 @@ Der Funktionskatalog enthält je Funktion die benötigten Parameter und ein
 `{"requestId":"1","command":"stopMilking","boxNumber":1}`. Die Antwort erscheint
 auf `<Benutzername>/Melkroboter/Result`; fehlende Parameter werden dort als
 `invalidParameters` gemeldet.
+Im Tab **Funktionslog** zeigt MiOne jeden empfangenen Melkroboter-Befehl mit
+Topic, Funktion, Parametern, Validierungsstatus und ob das Result wieder per
+MQTT veröffentlicht wurde.
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 

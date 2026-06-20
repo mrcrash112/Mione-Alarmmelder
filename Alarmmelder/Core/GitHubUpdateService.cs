@@ -65,6 +65,15 @@ namespace MioneAlarmmelder.Core
             }
         }
         public static bool CurrentIsBeta { get { return CurrentDisplayVersion.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase) >= 0; } }
+        public static string CurrentVersionLabel
+        {
+            get
+            {
+                string value = CurrentDisplayVersion;
+                int beta = value.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase);
+                return beta >= 0 ? value.Substring(0, beta) + " Beta" : value;
+            }
+        }
 
         private static UpdateCheckResult Check(AppSettings settings)
         {

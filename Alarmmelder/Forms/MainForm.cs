@@ -57,7 +57,7 @@ namespace MioneAlarmmelder.Forms
             trayMenu.Items.Add("Beenden", null, delegate { allowClose = true; Close(); });
             trayIcon = new NotifyIcon(); trayIcon.Text = "Mione Alarmmelder - startet"; trayIcon.ContextMenuStrip = trayMenu; trayIcon.Visible = true;
             trayIcon.DoubleClick += delegate { ShowWindow(); }; SetStatus("Wird gestartet ...", MonitorState.Waiting); ResetConnectionStatus();
-            versionLabel.Text = "Version " + GitHubUpdateService.CurrentVersion;
+            versionLabel.Text = "Version " + GitHubUpdateService.CurrentVersionLabel;
             errorPathLabel.Text = "Datei: " + ErrorLogger.FilePath; LoadErrorLog();
             UpdateActionButtons(); overviewUpdateHighlight = HasUnacknowledgedUpdate(); RenderAlarmList();
         }
@@ -290,8 +290,7 @@ namespace MioneAlarmmelder.Forms
             updateEnabledBox.Checked = settings.UpdateEnabled; updateRepositoryBox.Text = settings.UpdateRepository; updateAssetBox.Text = settings.UpdateAssetName;
             updateIntervalBox.Text = settings.UpdateCheckMinutes.ToString();
             updateChannelBox.SelectedIndex = String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            currentVersionLabel.Text = "Installierte Version: " + GitHubUpdateService.CurrentDisplayVersion +
-                (GitHubUpdateService.CurrentIsBeta ? " (Beta)" : " (Stable)");
+            currentVersionLabel.Text = "Installierte Version: " + GitHubUpdateService.CurrentVersionLabel;
         }
 
         private bool ReadFields()

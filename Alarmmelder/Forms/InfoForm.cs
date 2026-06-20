@@ -18,7 +18,7 @@ namespace MioneAlarmmelder.Forms
             Label phoneTitle = AddLabel("Telefon:", 210, 150, 80, 22); LinkLabel phone = AddLink("01575 1623434", "tel:+4915751623434", 300, 150, 220);
             Label mailTitle = AddLabel("E-Mail:", 210, 178, 80, 22); LinkLabel mail = AddLink("kontakt@elektrotechnik-jozefowicz.de", "mailto:kontakt@elektrotechnik-jozefowicz.de", 300, 178, 270);
             Label webTitle = AddLabel("Website:", 210, 206, 80, 22); LinkLabel web = AddLink("elektrotechnik-jozefowicz.de", "https://elektrotechnik-jozefowicz.de", 300, 206, 260);
-            Label details = AddLabel("Tätigkeitsbereich\r\nElektrotechnische Anlagen, Wärme- und Klimaanlagen sowie Melktechnik.\r\n\r\nUSt-IdNr.: DE294221984\r\n\r\nMione Alarmmelder Version " + GitHubUpdateService.CurrentVersion, 20, 245, 550, 135);
+            Label details = AddLabel("Tätigkeitsbereich\r\nElektrotechnische Anlagen, Wärme- und Klimaanlagen sowie Melktechnik.\r\n\r\nUSt-IdNr.: DE294221984\r\n\r\nMione Alarmmelder Version " + GitHubUpdateService.CurrentVersionLabel, 20, 245, 550, 135);
             Button close = new Button(); close.Text = "Schließen"; close.Location = new Point(455, 392); close.Size = new Size(110, 30); close.DialogResult = DialogResult.OK;
             Controls.Add(logo); Controls.Add(title); Controls.Add(owner); Controls.Add(phoneTitle); Controls.Add(phone); Controls.Add(mailTitle); Controls.Add(mail); Controls.Add(webTitle); Controls.Add(web); Controls.Add(details); Controls.Add(close);
             AcceptButton = close; CancelButton = close;

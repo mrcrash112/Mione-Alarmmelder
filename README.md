@@ -118,19 +118,20 @@ python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer listen Melkr
 python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer alarm --modem-imei 123456789012345
 ```
 
-Für die grafische Überwachung auf macOS gibt es zusätzlich eine lokale
-Browser-GUI:
+Für die grafische Überwachung auf macOS gibt es zusätzlich eine Tkinter-GUI:
 
 ```bash
 python3 tools/mqtt_gui.py
 ```
 
-Das Programm öffnet `http://127.0.0.1:8765`. Die GUI abonniert nach dem Verbinden automatisch
-`<Benutzername>/Melkroboter/#` und `<Benutzername>/Alarmfunktionen/#`, zeigt die
-Boxen parallel als Tabelle, listet empfangene Topics und kann die im
-Funktionskatalog gefundenen Melkroboter-Befehle nach
-`<Benutzername>/Melkroboter/Command` publishen. Server, Port und Benutzer werden
-lokal gespeichert; das Passwort wird nur für die aktuelle Sitzung verwendet.
+Falls `import tkinter` auf macOS fehlschlägt, kann Tkinter mit
+`brew install python-tk@3.14` nachinstalliert werden. Die GUI abonniert nach dem
+Verbinden automatisch `<Benutzername>/Melkroboter/#` und
+`<Benutzername>/Alarmfunktionen/#`, zeigt die Boxen parallel als Tabelle, listet
+empfangene Topics und kann die im Funktionskatalog gefundenen
+Melkroboter-Befehle nach `<Benutzername>/Melkroboter/Command` publishen. Server,
+Port und Benutzer werden lokal gespeichert; das Passwort wird nur für die
+aktuelle Sitzung verwendet.
 
 ## GitHub-Updates
 

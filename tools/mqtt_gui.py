@@ -5,213 +5,13 @@ import queue
 import threading
 import time
 import uuid
-import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import tkinter as tk
+from tkinter import messagebox, ttk
 
-from mqtt_test import MqttClient
+from mqtt_test import MqttClient, pretty
 
 
 CONFIG_PATH = os.path.expanduser("~/.mione_mqtt_gui.json")
-STATE = None
-
-
-HTML = r"""<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mione MQTT Monitor</title>
-<style>
-:root { color-scheme: light dark; --line: #c9ced6; --soft: #eef1f4; --accent: #2563eb; --danger: #b91c1c; }
-body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
-header { display: grid; grid-template-columns: 1.2fr .4fr 1fr 1fr auto auto; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); align-items: end; }
-label { display: grid; gap: 3px; font-size: 12px; color: #667085; }
-input, select, button, textarea { font: inherit; }
-input, select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; }
-button { padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: Canvas; cursor: pointer; }
-button.primary { background: var(--accent); border-color: var(--accent); color: white; }
-button.danger { color: var(--danger); }
-#status { padding: 8px 12px; border-bottom: 1px solid var(--line); }
-main { display: grid; grid-template-columns: minmax(420px, 1.4fr) minmax(360px, 1fr); gap: 12px; padding: 12px; }
-section { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-height: 120px; }
-h2 { margin: 0; padding: 8px 10px; font-size: 14px; border-bottom: 1px solid var(--line); background: var(--soft); color: #344054; }
-table { border-collapse: collapse; width: 100%; }
-th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
-th { font-size: 12px; color: #667085; background: color-mix(in srgb, var(--soft) 60%, Canvas); }
-tr:hover { background: color-mix(in srgb, var(--soft) 50%, Canvas); }
-.panel { padding: 10px; display: grid; gap: 8px; }
-.cmd-grid { display: grid; grid-template-columns: 1fr 110px 110px 110px auto; gap: 8px; align-items: end; }
-pre, textarea { box-sizing: border-box; width: 100%; min-height: 220px; margin: 0; padding: 10px; border: 0; border-top: 1px solid var(--line); background: Canvas; overflow: auto; }
-.small { color: #667085; font-size: 12px; }
-@media (max-width: 980px) { header, main, .cmd-grid { grid-template-columns: 1fr; } }
-</style>
-</head>
-<body>
-<header>
-  <label>MQTT-Server<input id="host" value="localhost"></label>
-  <label>Port<input id="port" value="1883"></label>
-  <label>User / Top-Topic<input id="user"></label>
-  <label>Passwort<input id="password" type="password"></label>
-  <button class="primary" onclick="connect()">Verbinden</button>
-  <button class="danger" onclick="disconnect()">Trennen</button>
-</header>
-<div id="status">Nicht verbunden</div>
-<main>
-  <div>
-    <section>
-      <h2>Boxenstatus</h2>
-      <table>
-        <thead><tr><th>Box</th><th>Kuh</th><th>Ansetzen</th><th>Betrieb</th><th>Text</th><th>Boxstatus</th><th>Milch</th><th>Zeit</th></tr></thead>
-        <tbody id="boxes"></tbody>
-      </table>
-    </section>
-    <section style="margin-top:12px">
-      <h2>Melkroboter-Funktionen</h2>
-      <div class="panel">
-        <div class="cmd-grid">
-          <label>Funktion<select id="command"></select></label>
-          <label>boxNumber<input id="boxNumber"></label>
-          <label>robotPosition<input id="robotPosition"></label>
-          <label>samplingBox<input id="samplingBox"></label>
-          <button class="primary" onclick="sendCommand()">Senden</button>
-        </div>
-        <div class="small" id="commandInfo">Warte auf Funktionskatalog ...</div>
-      </div>
-      <table>
-        <thead><tr><th>Name</th><th>Beschreibung</th><th>Parameter</th></tr></thead>
-        <tbody id="functions"></tbody>
-      </table>
-    </section>
-  </div>
-  <div>
-    <section>
-      <h2>Topics</h2>
-      <table>
-        <thead><tr><th>Topic</th><th>Zeit</th><th>Typ/Inhalt</th></tr></thead>
-        <tbody id="topics"></tbody>
-      </table>
-    </section>
-    <section style="margin-top:12px">
-      <h2>JSON / Payload</h2>
-      <pre id="detail"></pre>
-    </section>
-  </div>
-</main>
-<script>
-const state = { topics: new Map(), boxes: new Map(), functions: [] };
-const evt = new EventSource('/events');
-evt.onmessage = (event) => handleEvent(JSON.parse(event.data));
-
-async function api(path, data) {
-  const res = await fetch(path, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data || {}) });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || res.statusText);
-  return body;
-}
-async function loadConfig() {
-  const res = await fetch('/config');
-  const cfg = await res.json();
-  host.value = cfg.host || 'localhost'; port.value = cfg.port || 1883; user.value = cfg.user || '';
-}
-async function connect() {
-  try { await api('/connect', {host: host.value, port: Number(port.value), user: user.value, password: password.value}); }
-  catch (err) { alert(err.message); }
-}
-async function disconnect() { await api('/disconnect'); }
-async function sendCommand() {
-  const payload = { requestId: crypto.randomUUID().slice(0, 8), command: command.value };
-  addNumber(payload, 'boxNumber'); addNumber(payload, 'robotPosition'); addNumber(payload, 'samplingBox');
-  try { await api('/publish-command', payload); detail.textContent = JSON.stringify(payload, null, 2); }
-  catch (err) { alert(err.message); }
-}
-function addNumber(payload, key) {
-  const value = document.getElementById(key).value.trim();
-  if (!value) return;
-  const number = Number(value);
-  payload[key] = Number.isFinite(number) ? number : value;
-}
-function handleEvent(event) {
-  if (event.kind === 'status') status.textContent = event.text;
-  if (event.kind === 'error') status.textContent = 'Fehler: ' + event.text;
-  if (event.kind === 'message' || event.kind === 'published') handleMessage(event.topic, event.payload, event.kind === 'published');
-}
-function handleMessage(topic, payload, published) {
-  const stamp = new Date().toLocaleTimeString();
-  let parsed = null;
-  try { parsed = JSON.parse(payload); } catch {}
-  state.topics.set(topic, {topic, stamp, payload, parsed, published});
-  renderTopics();
-  if (parsed) {
-    const boxes = extractBoxes(parsed);
-    if (boxes.length) {
-      for (const box of boxes) updateBox(box, stamp);
-      renderBoxes();
-    }
-    if (Array.isArray(parsed.functions)) {
-      state.functions = parsed.functions;
-      renderFunctions();
-    }
-  }
-}
-function extractBoxes(data) {
-  if (Array.isArray(data.boxes)) return data.boxes;
-  if (data.data && Array.isArray(data.data.boxes)) return data.data.boxes;
-  return [];
-}
-function updateBox(box, stamp) {
-  const id = text(box.boxNumber ?? box.BoxNumber);
-  if (!id) return;
-  state.boxes.set(id, {...box, _stamp: stamp});
-}
-function renderBoxes() {
-  const rows = [...state.boxes.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
-  boxes.innerHTML = rows.map(([id, b]) => `<tr><td>${esc(id)}</td><td>${esc(b.cowNumber ?? b.CowNumber)}</td><td>${esc(b.attachmentStatus ?? b.AttachmentStatus)}</td><td>${esc(b.operationStatus ?? b.OperationStatus)}</td><td>${esc(b.operationStatusText ?? b.OperationStatusText)}</td><td>${esc(b.boxStatusText ?? b.BoxStatusText ?? b.boxStatus)}</td><td>${esc(milk(b))}</td><td>${esc(b._stamp)}</td></tr>`).join('');
-}
-function renderFunctions() {
-  command.innerHTML = '';
-  functions.innerHTML = state.functions.map(fn => {
-    const option = document.createElement('option');
-    option.value = fn.name || ''; option.textContent = fn.name || '';
-    command.appendChild(option);
-    return `<tr onclick="selectFunction('${escAttr(fn.name || '')}')"><td>${esc(fn.name)}</td><td>${esc(fn.label)}</td><td>${esc(paramNames(fn).join(', '))}</td></tr>`;
-  }).join('');
-  commandInfo.textContent = state.functions.length + ' Funktionen gefunden';
-}
-function selectFunction(name) {
-  command.value = name;
-  const fn = state.functions.find(item => item.name === name);
-  commandInfo.textContent = fn && fn.payloadExample ? fn.payloadExample : '';
-}
-function renderTopics() {
-  const rows = [...state.topics.values()].sort((a, b) => a.topic.localeCompare(b.topic));
-  topics.innerHTML = rows.map(item => `<tr onclick="showTopic('${escAttr(item.topic)}')"><td>${esc(item.topic)}${item.published ? ' [gesendet]' : ''}</td><td>${esc(item.stamp)}</td><td>${esc(summary(item))}</td></tr>`).join('');
-}
-function showTopic(topic) {
-  const item = state.topics.get(topic);
-  if (!item) return;
-  detail.textContent = item.parsed ? JSON.stringify(item.parsed, null, 2) : item.payload;
-}
-function summary(item) {
-  if (item.parsed && item.parsed.type) return item.parsed.type;
-  if (item.parsed && typeof item.parsed === 'object') return Object.keys(item.parsed).slice(0, 4).join(', ');
-  return item.payload.slice(0, 80);
-}
-function paramNames(fn) {
-  return Array.isArray(fn.parameters) ? fn.parameters.map(p => p.name).filter(Boolean) : [];
-}
-function milk(b) {
-  const current = b.milkYield ?? b.MilkYield ?? '';
-  const expected = b.expectedMilkYield ?? b.ExpectedMilkYield ?? '';
-  return expected ? `${current} / ${expected}` : current;
-}
-function text(value) { return value === undefined || value === null ? '' : String(value); }
-function esc(value) { return text(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function escAttr(value) { return esc(value).replace(/`/g, '&#96;'); }
-loadConfig();
-</script>
-</body>
-</html>
-"""
 
 
 class MqttWorker(threading.Thread):
@@ -230,26 +30,39 @@ class MqttWorker(threading.Thread):
     def publish(self, suffix, payload):
         self.outgoing.put((self.root(suffix), payload))
 
+    def close(self):
+        self.stop_event.set()
+        try:
+            if self.client and self.client.sock:
+                self.client.sock.close()
+        except Exception:
+            pass
+
     def run(self):
+        self.events.put(("log", "Verbinde mit %s:%s ..." % (self.host, self.port)))
         try:
             with MqttClient(self.host, self.port, self.user, self.password, 3.0) as client:
                 self.client = client
-                client.subscribe(self.root("Melkroboter/#"))
-                client.subscribe(self.root("Alarmfunktionen/#"))
-                self.events.put({"kind": "status", "text": "Verbunden: %s:%s" % (self.host, self.port)})
+                self.events.put(("status", "Verbunden: %s:%s" % (self.host, self.port)))
+                for topic in (self.root("Melkroboter/#"), self.root("Alarmfunktionen/#")):
+                    self.events.put(("log", "Abonniere " + topic))
+                    client.subscribe(topic)
+                self.events.put(("log", "Abos aktiv. Warte auf MQTT-Daten ..."))
+
                 last_ping = time.time()
                 while not self.stop_event.is_set():
                     self.flush_outgoing()
                     for topic, payload in client.messages(0.5):
-                        self.events.put({"kind": "message", "topic": topic, "payload": payload})
+                        self.events.put(("message", topic, payload))
                     if time.time() - last_ping > 25:
                         client.ping()
                         last_ping = time.time()
         except Exception as exc:
             if not self.stop_event.is_set():
-                self.events.put({"kind": "error", "text": str(exc)})
+                self.events.put(("error", "%s: %s" % (exc.__class__.__name__, exc)))
         finally:
-            self.events.put({"kind": "status", "text": "Getrennt"})
+            self.client = None
+            self.events.put(("status", "Getrennt"))
 
     def flush_outgoing(self):
         while True:
@@ -258,158 +71,364 @@ class MqttWorker(threading.Thread):
             except queue.Empty:
                 return
             self.client.publish(topic, payload)
-            self.events.put({"kind": "published", "topic": topic, "payload": payload})
+            self.events.put(("published", topic, payload))
+            self.events.put(("log", "Gesendet: " + topic))
 
     def root(self, suffix):
         return self.user + "/" + suffix.strip("/")
 
 
-class AppState:
+class MqttGui(tk.Tk):
     def __init__(self):
-        self.lock = threading.Lock()
-        self.events = []
-        self.clients = []
+        tk.Tk.__init__(self)
+        self.title("Mione MQTT Monitor")
+        self.geometry("1240x780")
+        self.minsize(980, 620)
+
+        self.events = queue.Queue()
         self.stop_event = threading.Event()
         self.worker = None
-        self.config = self.load_config()
+        self.topic_payloads = {}
+        self.functions = []
+        self.config_data = self.load_config()
+
+        self.host_var = tk.StringVar(value=self.config_data.get("host", "localhost"))
+        self.port_var = tk.StringVar(value=str(self.config_data.get("port", 1883)))
+        self.user_var = tk.StringVar(value=self.config_data.get("user", ""))
+        self.password_var = tk.StringVar()
+        self.status_var = tk.StringVar(value="Nicht verbunden")
+        self.command_var = tk.StringVar()
+        self.box_var = tk.StringVar()
+        self.robot_position_var = tk.StringVar()
+        self.sampling_box_var = tk.StringVar()
+
+        self.create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.after(150, self.process_events)
+
+    def create_widgets(self):
+        top = ttk.Frame(self, padding=10)
+        top.pack(fill="x")
+
+        self.add_labeled_entry(top, "MQTT-Server", self.host_var, 0, 0, 24)
+        self.add_labeled_entry(top, "Port", self.port_var, 0, 1, 8)
+        self.add_labeled_entry(top, "User / Top-Topic", self.user_var, 0, 2, 24)
+        self.add_labeled_entry(top, "Passwort", self.password_var, 0, 3, 24, show="*")
+        ttk.Button(top, text="Verbinden", command=self.connect).grid(row=1, column=4, padx=(8, 4), sticky="ew")
+        ttk.Button(top, text="Trennen", command=self.disconnect).grid(row=1, column=5, sticky="ew")
+        for col in (0, 2, 3):
+            top.columnconfigure(col, weight=1)
+
+        status = ttk.Frame(self, padding=(10, 0, 10, 8))
+        status.pack(fill="x")
+        ttk.Label(status, textvariable=self.status_var).pack(side="left")
+
+        tabs = ttk.Notebook(self)
+        tabs.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.box_tab = ttk.Frame(tabs, padding=8)
+        self.command_tab = ttk.Frame(tabs, padding=8)
+        self.topic_tab = ttk.Frame(tabs, padding=8)
+        self.log_tab = ttk.Frame(tabs, padding=8)
+        tabs.add(self.box_tab, text="Boxenstatus")
+        tabs.add(self.command_tab, text="Funktionen senden")
+        tabs.add(self.topic_tab, text="Topics / JSON")
+        tabs.add(self.log_tab, text="Log")
+
+        self.create_box_tab()
+        self.create_command_tab()
+        self.create_topic_tab()
+        self.create_log_tab()
+
+    def add_labeled_entry(self, parent, label, variable, row, column, width, show=None):
+        ttk.Label(parent, text=label).grid(row=row, column=column, sticky="w")
+        ttk.Entry(parent, textvariable=variable, width=width, show=show).grid(row=row + 1, column=column, sticky="ew", padx=(0, 8))
+
+    def create_box_tab(self):
+        columns = ("box", "cow", "attachment", "operation", "operation_text", "box_status", "milk", "updated")
+        self.box_tree = ttk.Treeview(self.box_tab, columns=columns, show="headings", height=20)
+        headings = {
+            "box": "Box", "cow": "Kuh", "attachment": "Ansetzen", "operation": "Betrieb",
+            "operation_text": "Betrieb Text", "box_status": "Boxstatus", "milk": "Milch", "updated": "Aktualisiert"
+        }
+        widths = {"box": 60, "cow": 80, "attachment": 110, "operation": 90, "operation_text": 190, "box_status": 160, "milk": 100, "updated": 120}
+        for col in columns:
+            self.box_tree.heading(col, text=headings[col])
+            self.box_tree.column(col, width=widths[col], anchor="w")
+        self.box_tree.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(self.box_tab, orient="vertical", command=self.box_tree.yview)
+        scroll.pack(side="right", fill="y")
+        self.box_tree.configure(yscrollcommand=scroll.set)
+
+    def create_command_tab(self):
+        left = ttk.Frame(self.command_tab)
+        left.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        right = ttk.Frame(self.command_tab)
+        right.pack(side="right", fill="both", expand=True)
+
+        columns = ("name", "label", "params")
+        self.function_tree = ttk.Treeview(left, columns=columns, show="headings", height=20)
+        for col, text, width in (("name", "Name", 210), ("label", "Beschreibung", 300), ("params", "Parameter", 170)):
+            self.function_tree.heading(col, text=text)
+            self.function_tree.column(col, width=width, anchor="w")
+        self.function_tree.pack(fill="both", expand=True)
+        self.function_tree.bind("<<TreeviewSelect>>", self.function_selected)
+
+        form = ttk.LabelFrame(right, text="Befehl publishen", padding=10)
+        form.pack(fill="x")
+        self.add_form_entry(form, "Funktion", self.command_var, 0)
+        self.add_form_entry(form, "boxNumber", self.box_var, 1)
+        self.add_form_entry(form, "robotPosition", self.robot_position_var, 2)
+        self.add_form_entry(form, "samplingBox", self.sampling_box_var, 3)
+        ttk.Button(form, text="Befehl senden", command=self.send_command).grid(row=4, column=1, sticky="e", pady=(8, 0))
+        form.columnconfigure(1, weight=1)
+
+        ttk.Label(right, text="Payload / Beispiel").pack(anchor="w", pady=(14, 2))
+        self.payload_text = tk.Text(right, height=12, wrap="word")
+        self.payload_text.pack(fill="both", expand=True)
+
+    def add_form_entry(self, parent, label, variable, row):
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=2)
+
+    def create_topic_tab(self):
+        left = ttk.Frame(self.topic_tab)
+        left.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        right = ttk.Frame(self.topic_tab)
+        right.pack(side="right", fill="both", expand=True)
+
+        self.topic_tree = ttk.Treeview(left, columns=("topic", "updated", "summary"), show="headings", height=20)
+        for col, text, width in (("topic", "Topic", 430), ("updated", "Zeit", 90), ("summary", "Inhalt", 280)):
+            self.topic_tree.heading(col, text=text)
+            self.topic_tree.column(col, width=width, anchor="w")
+        self.topic_tree.pack(fill="both", expand=True)
+        self.topic_tree.bind("<<TreeviewSelect>>", self.topic_selected)
+
+        ttk.Label(right, text="JSON / Payload").pack(anchor="w")
+        self.detail_text = tk.Text(right, wrap="word")
+        self.detail_text.pack(fill="both", expand=True)
+
+    def create_log_tab(self):
+        self.log_text = tk.Text(self.log_tab, wrap="word")
+        self.log_text.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(self.log_tab, orient="vertical", command=self.log_text.yview)
+        scroll.pack(side="right", fill="y")
+        self.log_text.configure(yscrollcommand=scroll.set)
+
+    def connect(self):
+        if self.worker:
+            self.log("Bereits verbunden oder Verbindung laeuft.")
+            return
+        user = self.user_var.get().strip().strip("/")
+        if not user:
+            messagebox.showerror("MQTT", "Bitte MQTT-User / Top-Topic eintragen.")
+            return
+        try:
+            port = int(self.port_var.get().strip())
+        except ValueError:
+            messagebox.showerror("MQTT", "Port ist keine Zahl.")
+            return
+        self.save_config()
+        self.stop_event = threading.Event()
+        self.worker = MqttWorker(self.host_var.get().strip(), port, user, self.password_var.get(), self.events, self.stop_event)
+        self.worker.start()
+        self.status_var.set("Verbinde ...")
+
+    def disconnect(self):
+        if not self.worker:
+            self.status_var.set("Nicht verbunden")
+            return
+        self.worker.close()
+        self.worker = None
+        self.status_var.set("Trenne ...")
+
+    def process_events(self):
+        while True:
+            try:
+                event = self.events.get_nowait()
+            except queue.Empty:
+                break
+            kind = event[0]
+            if kind == "status":
+                self.status_var.set(event[1])
+                self.log(event[1])
+                if event[1] == "Getrennt":
+                    self.worker = None
+            elif kind == "error":
+                self.status_var.set("Fehler: " + event[1])
+                self.log("FEHLER: " + event[1])
+                self.worker = None
+            elif kind == "log":
+                self.log(event[1])
+            elif kind == "message":
+                self.handle_message(event[1], event[2], False)
+            elif kind == "published":
+                self.handle_message(event[1] + " [gesendet]", event[2], True)
+        self.after(150, self.process_events)
+
+    def handle_message(self, topic, payload, published):
+        now = time.strftime("%H:%M:%S")
+        self.topic_payloads[topic] = payload
+        self.upsert(self.topic_tree, topic, (topic, now, self.summary(payload)))
+        self.log(("Gesendet " if published else "Empfangen ") + topic)
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return
+        boxes = self.extract_boxes(data)
+        if boxes:
+            self.update_boxes(boxes, now)
+        functions = data.get("functions") if isinstance(data, dict) else None
+        if isinstance(functions, list):
+            self.update_functions(functions)
+
+    def update_boxes(self, boxes, updated):
+        for box in boxes:
+            if not isinstance(box, dict):
+                continue
+            box_number = self.text(box, "boxNumber") or self.text(box, "BoxNumber")
+            if not box_number:
+                continue
+            milk = self.text(box, "milkYield") or self.text(box, "MilkYield")
+            expected = self.text(box, "expectedMilkYield") or self.text(box, "ExpectedMilkYield")
+            if expected:
+                milk = milk + " / " + expected if milk else expected
+            values = (
+                box_number,
+                self.text(box, "cowNumber") or self.text(box, "CowNumber"),
+                self.text(box, "attachmentStatus") or self.text(box, "AttachmentStatus"),
+                self.text(box, "operationStatus") or self.text(box, "OperationStatus"),
+                self.text(box, "operationStatusText") or self.text(box, "OperationStatusText"),
+                self.text(box, "boxStatusText") or self.text(box, "BoxStatusText") or self.text(box, "boxStatus"),
+                milk,
+                updated,
+            )
+            self.upsert(self.box_tree, box_number, values)
+
+    def update_functions(self, functions):
+        self.functions = functions
+        self.function_tree.delete(*self.function_tree.get_children())
+        for item in functions:
+            if not isinstance(item, dict):
+                continue
+            params = item.get("parameters") or []
+            param_names = []
+            for param in params:
+                if isinstance(param, dict) and param.get("name"):
+                    param_names.append(str(param.get("name")))
+            name = str(item.get("name", ""))
+            self.function_tree.insert("", "end", iid=name, values=(name, item.get("label", ""), ", ".join(param_names)))
+        self.log("%s Melkroboter-Funktionen geladen." % len(functions))
+
+    def send_command(self):
+        if not self.worker:
+            messagebox.showerror("MQTT", "Bitte zuerst verbinden.")
+            return
+        command = self.command_var.get().strip()
+        if not command:
+            messagebox.showerror("MQTT", "Bitte Funktion auswählen oder eintragen.")
+            return
+        payload = {"requestId": uuid.uuid4().hex[:8], "command": command}
+        self.add_optional_number(payload, "boxNumber", self.box_var.get())
+        self.add_optional_number(payload, "robotPosition", self.robot_position_var.get())
+        self.add_optional_number(payload, "samplingBox", self.sampling_box_var.get())
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self.worker.publish("Melkroboter/Command", text)
+        self.show_payload(text)
+
+    def function_selected(self, event):
+        selected = self.function_tree.selection()
+        if not selected:
+            return
+        name = selected[0]
+        self.command_var.set(name)
+        for item in self.functions:
+            if isinstance(item, dict) and item.get("name") == name:
+                self.show_payload(item.get("payloadExample", ""))
+                return
+
+    def topic_selected(self, event):
+        selected = self.topic_tree.selection()
+        if not selected:
+            return
+        payload = self.topic_payloads.get(selected[0], "")
+        self.detail_text.delete("1.0", "end")
+        self.detail_text.insert("1.0", pretty(payload))
+
+    def show_payload(self, payload):
+        self.payload_text.delete("1.0", "end")
+        self.payload_text.insert("1.0", pretty(payload))
+
+    def extract_boxes(self, data):
+        if not isinstance(data, dict):
+            return []
+        if isinstance(data.get("boxes"), list):
+            return data.get("boxes")
+        nested = data.get("data")
+        if isinstance(nested, dict) and isinstance(nested.get("boxes"), list):
+            return nested.get("boxes")
+        return []
+
+    def summary(self, payload):
+        try:
+            data = json.loads(payload)
+            if isinstance(data, dict):
+                if data.get("type"):
+                    return str(data.get("type"))
+                return ", ".join(list(data.keys())[:4])
+            if isinstance(data, list):
+                return str(len(data)) + " Eintraege"
+        except Exception:
+            pass
+        return payload.replace("\n", " ")[:80]
+
+    def upsert(self, tree, item_id, values):
+        item_id = str(item_id)
+        if tree.exists(item_id):
+            tree.item(item_id, values=values)
+        else:
+            tree.insert("", "end", iid=item_id, values=values)
+
+    def text(self, values, key):
+        value = values.get(key, "")
+        return "" if value is None else str(value)
+
+    def add_optional_number(self, payload, key, value):
+        value = value.strip()
+        if not value:
+            return
+        try:
+            payload[key] = int(value)
+        except ValueError:
+            payload[key] = value
+
+    def log(self, text):
+        stamp = time.strftime("%H:%M:%S")
+        self.log_text.insert("end", "[%s] %s\n" % (stamp, text))
+        self.log_text.see("end")
 
     def load_config(self):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
                 return json.load(handle)
         except Exception:
-            return {"host": "localhost", "port": 1883, "user": ""}
+            return {}
 
-    def save_config(self, host, port, user):
-        self.config = {"host": host, "port": port, "user": user}
+    def save_config(self):
+        data = {
+            "host": self.host_var.get().strip(),
+            "port": int(self.port_var.get().strip() or "1883"),
+            "user": self.user_var.get().strip(),
+        }
         try:
             with open(CONFIG_PATH, "w", encoding="utf-8") as handle:
-                json.dump(self.config, handle, ensure_ascii=False, indent=2)
+                json.dump(data, handle, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
-    def connect(self, host, port, user, password):
+    def close(self):
         self.disconnect()
-        self.save_config(host, port, user)
-        self.stop_event = threading.Event()
-        self.worker = MqttWorker(host, port, user, password, self, self.stop_event)
-        self.worker.start()
-
-    def disconnect(self):
-        if self.worker:
-            self.stop_event.set()
-            self.worker = None
-
-    def publish_command(self, payload):
-        if not self.worker:
-            raise RuntimeError("Nicht verbunden")
-        if not payload.get("requestId"):
-            payload["requestId"] = uuid.uuid4().hex[:8]
-        if not payload.get("command"):
-            raise RuntimeError("command fehlt")
-        self.worker.publish("Melkroboter/Command", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-
-    def put(self, event):
-        with self.lock:
-            self.events.append(event)
-            self.events = self.events[-200:]
-            clients = list(self.clients)
-        for client in clients:
-            client.put(event)
-
-
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):
-        return
-
-    def do_GET(self):
-        if self.path == "/":
-            self.respond(200, HTML.encode("utf-8"), "text/html; charset=utf-8")
-            return
-        if self.path == "/config":
-            self.json_response(STATE.config)
-            return
-        if self.path == "/events":
-            self.events()
-            return
-        self.respond(404, b"Not found", "text/plain")
-
-    def do_POST(self):
-        try:
-            data = self.read_json()
-            if self.path == "/connect":
-                STATE.connect(str(data.get("host", "localhost")), int(data.get("port", 1883)), str(data.get("user", "")), str(data.get("password", "")))
-                self.json_response({"ok": True})
-                return
-            if self.path == "/disconnect":
-                STATE.disconnect()
-                self.json_response({"ok": True})
-                return
-            if self.path == "/publish-command":
-                STATE.publish_command(data)
-                self.json_response({"ok": True})
-                return
-            self.json_response({"error": "Unbekannter Endpunkt"}, 404)
-        except Exception as exc:
-            self.json_response({"error": str(exc)}, 400)
-
-    def events(self):
-        client = queue.Queue()
-        with STATE.lock:
-            STATE.clients.append(client)
-            backlog = list(STATE.events[-20:])
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        try:
-            for event in backlog:
-                self.write_event(event)
-            while True:
-                self.write_event(client.get(timeout=30))
-        except Exception:
-            with STATE.lock:
-                if client in STATE.clients:
-                    STATE.clients.remove(client)
-
-    def write_event(self, event):
-        data = json.dumps(event, ensure_ascii=False).encode("utf-8")
-        self.wfile.write(b"data: " + data + b"\n\n")
-        self.wfile.flush()
-
-    def read_json(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
-            return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
-
-    def json_response(self, data, status=200):
-        self.respond(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
-
-    def respond(self, status, body, content_type):
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-
-def main():
-    global STATE
-    STATE = AppState()
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
-    url = "http://127.0.0.1:8765"
-    print("Mione MQTT Monitor startet auf", url)
-    webbrowser.open(url)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        STATE.disconnect()
-        server.server_close()
+        self.destroy()
 
 
 if __name__ == "__main__":
-    main()
+    MqttGui().mainloop()

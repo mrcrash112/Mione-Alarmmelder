@@ -6,7 +6,7 @@ namespace MioneAlarmmelder.Forms
     partial class MainForm
     {
         private PictureBox logoPicture; private Label titleLabel, versionLabel; private Label statusLabel; private Panel ledPanel;
-        private Label mqttStatusLabel, tcpStatusLabel, modemStatusLabel; private Panel mqttLedPanel, tcpLedPanel, modemLedPanel;
+        private Label mqttStatusLabel, tcpStatusLabel, modemStatusLabel, firmwareStatusLabel; private Panel mqttLedPanel, tcpLedPanel, modemLedPanel, firmwareLedPanel;
         private TabControl tabs; private ListView alarmList; private ListView phoneList;
         private TextBox messagePathBox, alarmSettingsPathBox, priorityPathBox, translationPathBox, alarmCatalogPathBox;
         private CheckBox mqttEnabledBox, tcpEnabledBox, startupBox, alarmProgressBox;
@@ -34,6 +34,8 @@ namespace MioneAlarmmelder.Forms
             tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 53); tcpStatusLabel.Size = new Size(285, 20);
             modemLedPanel = new Panel(); modemLedPanel.Location = new Point(515, 81); modemLedPanel.Size = new Size(14, 14); modemLedPanel.BackColor = Color.Gray;
             modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem: deaktiviert"; modemStatusLabel.Location = new Point(536, 80); modemStatusLabel.Size = new Size(285, 20);
+            firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
+            firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 108); tabs.Size = new Size(826, 434);
             overviewPage = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
@@ -98,6 +100,7 @@ namespace MioneAlarmmelder.Forms
             infoButton = new Button(); infoButton.Text = "Info"; infoButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; infoButton.Location = new Point(12, 555); infoButton.Size = new Size(100, 32);
             Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(versionLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);
             Controls.Add(mqttLedPanel); Controls.Add(mqttStatusLabel); Controls.Add(tcpLedPanel); Controls.Add(tcpStatusLabel); Controls.Add(modemLedPanel); Controls.Add(modemStatusLabel);
+            Controls.Add(firmwareLedPanel); Controls.Add(firmwareStatusLabel);
             Controls.Add(tabs); Controls.Add(saveButton); Controls.Add(infoButton);
             ResumeLayout(false); PerformLayout();
         }

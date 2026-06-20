@@ -15,6 +15,8 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - wiederholt die Updateprüfung im Hintergrund und markiert verfügbare Updates in der Übersicht mit Priorität `message`
 - zeigt Datei-, Verbindungs-, Heartbeat- und Updatefehler in einem eigenen Protokoll-Tab
 - zeigt unter der TCP-LED den Modemstatus: per Socket anhand der direkten Heartbeat-Verbindung, per MQTT nach einer Rückmeldung mit passender IMEI
+- meldet nach 15 Sekunden ohne Modemstatus-Heartbeat einen Verbindungsverlust
+- zeigt Modem-Firmware, Recovery, WWW-Version, Stable/Beta-Kanal und OTA-Status
 - bietet in der Übersicht einen dringenden Testalarm mit Priorität `urgent`, der gespeichert und über MQTT sowie TCP versendet wird
 - zeigt Kuhnummer und installierte Programmversion direkt in der Oberfläche
 - kann einen gekennzeichneten Testfehler über die aktivierten Versandwege senden
@@ -75,6 +77,12 @@ das kleine Statusfenster. Über MQTT abonniert MiOne dafür
 Alarmverbindung. Meldungen mit einer anderen `modemImei` werden verworfen. Das
 Fenster zeigt Alarmcode und -text sowie Rufnummer, SMS/Anruf, Status und
 Transportweg und schließt 30 Sekunden nach der letzten Meldung automatisch.
+
+Das Modem sendet alle fünf Sekunden einen eigenen Status-Heartbeat nach
+`<Benutzername>/MiOne/ModemStatus`. MiOne prüft dessen IMEI und Zeitabstand.
+Über TCP fordert MiOne denselben Datensatz mit `{"type":"statusRequest"}` an.
+Der Status enthält außerdem die installierten Versionen von Hauptprogramm,
+Recovery und WWW sowie Kanal, Updateverfügbarkeit und Fortschritt.
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 

@@ -14,6 +14,8 @@ namespace MioneAlarmmelder
         private System.Threading.Timer heartbeatTimer, updateTimer; private int heartbeatPending, updateCheckPending;
         private string notifiedUpdateTag = "";
         private bool heartbeatValue, mqttModemActive;
+        private DateTime lastModemStatusUtc = DateTime.MinValue;
+        private bool modemStatusTimedOut;
 
         public AlarmApplicationContext()
         {
@@ -47,6 +49,7 @@ namespace MioneAlarmmelder
             {
                 monitor.Start(); main.SetPhones(monitor.GetMobileConfigurations()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
                 main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.MqttEnabled ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.MqttEnabled ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
+                lastModemStatusUtc = DateTime.UtcNow;
                 heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
             }
             catch (Exception ex) { ErrorLogger.Log("Dateiüberwachung", ex); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
@@ -61,15 +64,27 @@ namespace MioneAlarmmelder
             Interlocked.Exchange(ref heartbeatPending, 0);
             heartbeatValue = false;
             mqttModemActive = false;
+            lastModemStatusUtc = DateTime.MinValue;
+            modemStatusTimedOut = false;
             Interlocked.Exchange(ref updateCheckPending, 0);
             if (monitor != null) { monitor.Dispose(); monitor = null; } dispatcher = null;
         }
         private void AlarmProgressReceived(object sender, AlarmProgressEvent e)
         {
+            if (String.Equals(e.Action, "Modemstatus", StringComparison.OrdinalIgnoreCase))
+            {
+                MonitorState modemState = ModemState(e.Status);
+                lastModemStatusUtc = DateTime.UtcNow;
+                modemStatusTimedOut = false;
+                if (String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase)) mqttModemActive = modemState == MonitorState.Ok;
+                main.SetModemStatus(e.Source, e.Status.Length == 0 ? "aktiv" : e.Status, modemState);
+                if (!String.IsNullOrEmpty(e.FirmwareStatus))
+                    main.SetFirmwareStatus(e.FirmwareStatus, modemState == MonitorState.Error ? MonitorState.Error :
+                        e.FirmwareUpdateAvailable ? MonitorState.Waiting : MonitorState.Ok);
+                return;
+            }
             MonitorState state = ModemState(e.Status);
-            if (String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase)) mqttModemActive = state == MonitorState.Ok;
-            main.SetModemStatus(e.Source, e.Status.Length == 0 ? "aktiv" : e.Status, state);
-            if (!String.Equals(e.Action, "Modemstatus", StringComparison.OrdinalIgnoreCase)) main.ShowAlarmProgress(e);
+            main.ShowAlarmProgress(e);
         }
         private static MonitorState ModemState(string status)
         {
@@ -130,6 +145,7 @@ namespace MioneAlarmmelder
         private void HeartbeatTick(object state)
         {
             if (dispatcher == null || (!settings.MqttEnabled && !settings.TcpEnabled)) return;
+            CheckModemStatusTimeout();
             if (Interlocked.Exchange(ref heartbeatPending, 1) != 0) return;
             if (settings.MqttEnabled) main.SetMqttStatus("Heartbeat wird gesendet", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("Heartbeat wird gesendet", MonitorState.Sending);
@@ -143,11 +159,27 @@ namespace MioneAlarmmelder
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
-            if (e.TcpEnabled) main.SetModemStatus("Socket", e.TcpSuccessful ? "aktiv" : "nicht erreichbar", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
+            if (e.TcpEnabled && !e.TcpSuccessful) main.SetModemStatus("Socket", "nicht erreichbar", MonitorState.Error);
             else if (e.MqttEnabled && !e.MqttSuccessful) main.SetModemStatus("MQTT", "Verbindung fehlerhaft", MonitorState.Error);
-            else if (e.MqttEnabled) main.SetModemStatus("MQTT", mqttModemActive ? "aktiv" : "warte auf Rückmeldung", mqttModemActive ? MonitorState.Ok : MonitorState.Waiting);
+            else if (e.MqttEnabled)
+            {
+                bool fresh = DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= 15;
+                main.SetModemStatus("MQTT", mqttModemActive && fresh ? "aktiv" : fresh ? "warte auf Rückmeldung" : "keine Rückmeldung seit 15 Sekunden",
+                    mqttModemActive && fresh ? MonitorState.Ok : fresh ? MonitorState.Waiting : MonitorState.Error);
+            }
             else main.SetModemStatus("", "deaktiviert", MonitorState.Disabled);
             if (e.Error.Length > 0) { ErrorLogger.Log("Heartbeat", e.Error); main.SetStatus("Heartbeat-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
+        }
+        private void CheckModemStatusTimeout()
+        {
+            if (lastModemStatusUtc == DateTime.MinValue || DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= 15) return;
+            mqttModemActive = false;
+            main.SetModemStatus(settings.TcpEnabled ? "Socket" : "MQTT", "keine Rückmeldung seit 15 Sekunden", MonitorState.Error);
+            if (!modemStatusTimedOut)
+            {
+                modemStatusTimedOut = true;
+                ErrorLogger.Log("Modem-Heartbeat", "Seit mehr als 15 Sekunden wurde kein Modemstatus empfangen.");
+            }
         }
         private void MobileConfigCompleted(object sender, DispatchResultEventArgs e)
         {

@@ -184,12 +184,20 @@ namespace MioneAlarmmelder.Forms
             modemStatusLabel.Text = "Modem" + (String.IsNullOrEmpty(transport) ? "" : " (" + transport + ")") + ": " + ShortText(text, 30);
             modemStatusLabel.Tag = text;
         }
+        public void SetFirmwareStatus(string text, MonitorState state)
+        {
+            if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { SetFirmwareStatus(text, state); }); return; }
+            firmwareLedPanel.BackColor = StateColor(state);
+            firmwareStatusLabel.Text = "Modem-Firmware: " + ShortText(String.IsNullOrEmpty(text) ? "warte auf Status" : text, 52);
+            firmwareStatusLabel.Tag = text;
+        }
 
         public void ResetConnectionStatus()
         {
             SetMqttStatus(settings.MqttEnabled ? "bereit" : "deaktiviert", settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
             SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
             SetModemStatus(settings.TcpEnabled ? "Socket" : settings.MqttEnabled ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.MqttEnabled ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
+            SetFirmwareStatus(settings.TcpEnabled || settings.MqttEnabled ? "warte auf Status" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
         }
 
         public void SetUpdateStatus(string text)

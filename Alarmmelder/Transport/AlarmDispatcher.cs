@@ -67,7 +67,13 @@ namespace MioneAlarmmelder.Transport
                 }
                 if (snapshot.TcpEnabled)
                 {
-                    try { TcpPublisher.Publish(snapshot.TcpHost, snapshot.TcpPort, json); tcpSuccessful = true; sent++; }
+                    try
+                    {
+                        AlarmProgressEvent status = TcpPublisher.RequestModemStatus(snapshot.TcpHost, snapshot.TcpPort, json, 5000);
+                        if (!String.Equals(status.ModemImei, snapshot.ModemImei, StringComparison.Ordinal))
+                            throw new InvalidOperationException("Die Statusantwort gehört zu einer anderen Modem-IMEI.");
+                        OnProgressReceived(status); tcpSuccessful = true; sent++;
+                    }
                     catch (Exception ex) { tcpError = ex.Message; errors.Append("TCP-Heartbeat: " + ex.Message + " "); }
                 }
                 OnHeartbeatCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.MqttEnabled,

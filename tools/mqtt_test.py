@@ -76,6 +76,7 @@ class MqttClient:
         self.timeout = timeout
         self.sock = None
         self.packet_id = 1
+        self.pending_messages = []
 
     def __enter__(self):
         self.sock = socket.create_connection((self.host, self.port), self.timeout)
@@ -126,25 +127,55 @@ class MqttClient:
         self.packet_id += 1
         body = packet_id.to_bytes(2, "big") + enc_string(topic) + b"\x00"
         send_packet(self.sock, 0x82, body)
-        header, response = read_packet(self.sock)
-        if header >> 4 != 9:
-            raise RuntimeError("SUBACK erwartet, Paket %s empfangen" % (header >> 4))
+        deadline = time.time() + self.timeout
+        while True:
+            self.sock.settimeout(max(0.1, deadline - time.time()))
+            header, response = read_packet(self.sock)
+            packet_type = header >> 4
+            if packet_type == 9:
+                if len(response) >= 3 and response[2] == 0x80:
+                    raise RuntimeError("Abo abgelehnt: " + topic)
+                return packet_id
+            if packet_type == 3:
+                message = self.decode_publish(header, response)
+                if message:
+                    self.pending_messages.append(message)
+                continue
+            if time.time() >= deadline:
+                raise RuntimeError("SUBACK Timeout fuer " + topic)
+            raise RuntimeError("SUBACK erwartet, Paket %s empfangen" % packet_type)
         return packet_id
 
     def messages(self, seconds):
         end = time.time() + seconds
+        while self.pending_messages:
+            yield self.pending_messages.pop(0)
         while time.time() < end:
             self.sock.settimeout(max(0.1, end - time.time()))
             try:
                 header, body = read_packet(self.sock)
             except socket.timeout:
                 return
-            if header >> 4 != 3 or len(body) < 2:
+            if header >> 4 != 3:
                 continue
-            topic_len = int.from_bytes(body[:2], "big")
-            topic = body[2:2 + topic_len].decode("utf-8", "replace")
-            payload = body[2 + topic_len:].decode("utf-8", "replace")
-            yield topic, payload
+            message = self.decode_publish(header, body)
+            if message:
+                yield message
+
+    def decode_publish(self, header, body):
+        if len(body) < 2:
+            return None
+        topic_len = int.from_bytes(body[:2], "big")
+        offset = 2 + topic_len
+        if topic_len < 1 or offset > len(body):
+            return None
+        if ((header >> 1) & 3) > 0:
+            offset += 2
+        if offset > len(body):
+            return None
+        topic = body[2:2 + topic_len].decode("utf-8", "replace")
+        payload = body[offset:].decode("utf-8", "replace")
+        return topic, payload
 
 
 def pretty(payload):

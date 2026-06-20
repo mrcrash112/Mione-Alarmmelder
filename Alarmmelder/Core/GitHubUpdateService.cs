@@ -55,13 +55,24 @@ namespace MioneAlarmmelder.Core
         }
 
         public static Version CurrentVersion { get { return Assembly.GetExecutingAssembly().GetName().Version; } }
+        public static string CurrentDisplayVersion
+        {
+            get
+            {
+                object[] values = Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false);
+                if (values.Length > 0) return ((AssemblyInformationalVersionAttribute)values[0]).InformationalVersion;
+                return CurrentVersion.ToString();
+            }
+        }
+        public static bool CurrentIsBeta { get { return CurrentDisplayVersion.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase) >= 0; } }
 
         private static UpdateCheckResult Check(AppSettings settings)
         {
             if (String.IsNullOrEmpty(settings.UpdateRepository) || settings.UpdateRepository.IndexOf('/') < 1)
                 throw new InvalidOperationException("Bitte ein GitHub-Repository im Format Besitzer/Repository eintragen.");
             EnableTls12();
-            string endpoint = "https://api.github.com/repos/" + settings.UpdateRepository.Trim().Trim('/') + "/releases/latest";
+            bool beta = String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase);
+            string endpoint = "https://api.github.com/repos/" + settings.UpdateRepository.Trim().Trim('/') + (beta ? "/releases/tags/beta" : "/releases/latest");
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(endpoint);
             request.UserAgent = "MioneAlarmmelder-Updater"; request.Accept = "application/vnd.github+json"; request.Timeout = 15000;
             string json;
@@ -69,15 +80,20 @@ namespace MioneAlarmmelder.Core
             using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8)) json = reader.ReadToEnd();
             Dictionary<string, object> release = new JavaScriptSerializer().DeserializeObject(json) as Dictionary<string, object>;
             if (release == null) throw new InvalidDataException("Ungültige Antwort von GitHub.");
-            string tag = Value(release, "tag_name"); Version version = ParseVersion(tag);
-            UpdateCheckResult result = new UpdateCheckResult(); result.TagName = tag; result.LatestVersion = version;
-            result.HasUpdate = version.CompareTo(CurrentVersion) > 0;
-            if (!result.HasUpdate) return result;
             object assetsValue; object[] assets = release.TryGetValue("assets", out assetsValue) ? assetsValue as object[] : null;
             if (assets == null) throw new InvalidDataException("Das GitHub-Release enthält keine Assets.");
             Dictionary<string, object> selected = SelectAsset(assets, settings.UpdateAssetName);
             if (selected == null) throw new FileNotFoundException("Release-Asset nicht gefunden: " + settings.UpdateAssetName);
-            result.AssetName = Value(selected, "name"); result.DownloadUrl = Value(selected, "browser_download_url"); result.Digest = Value(selected, "digest");
+            string tag = Value(release, "tag_name");
+            string assetName = Value(selected, "name");
+            string versionText = beta ? ExtractVersionFromAsset(assetName) : tag;
+            Version version = ParseVersion(versionText);
+            bool candidateBeta = versionText.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase) >= 0 || beta;
+            UpdateCheckResult result = new UpdateCheckResult(); result.TagName = versionText; result.LatestVersion = version; result.Channel = beta ? "beta" : "stable";
+            int compare = version.CompareTo(CurrentVersion);
+            result.HasUpdate = compare > 0 || (compare == 0 && CurrentIsBeta && !candidateBeta);
+            if (!result.HasUpdate) return result;
+            result.AssetName = assetName; result.DownloadUrl = Value(selected, "browser_download_url"); result.Digest = Value(selected, "digest");
             result.IsZip = result.AssetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
             return result;
         }
@@ -86,8 +102,17 @@ namespace MioneAlarmmelder.Core
         {
             string value = (tag ?? "").Trim(); if (value.StartsWith("v", StringComparison.OrdinalIgnoreCase)) value = value.Substring(1);
             int dash = value.IndexOf('-'); if (dash >= 0) value = value.Substring(0, dash);
+            int beta = value.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase); if (beta >= 0) value = value.Substring(0, beta);
             try { return new Version(value); }
             catch (Exception) { throw new InvalidDataException("Ungültige Release-Version: " + tag); }
+        }
+        private static string ExtractVersionFromAsset(string assetName)
+        {
+            string value = Path.GetFileNameWithoutExtension(assetName ?? "");
+            const string prefix = "MioneAlarmmelder-";
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) value = value.Substring(prefix.Length);
+            if (String.IsNullOrEmpty(value)) throw new InvalidDataException("Aus dem Beta-Asset konnte keine Version gelesen werden: " + assetName);
+            return value;
         }
         private static string Value(Dictionary<string, object> values, string key) { object value; return values.TryGetValue(key, out value) && value != null ? value.ToString() : ""; }
         private static void EnableTls12() { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; }
@@ -187,7 +212,7 @@ namespace MioneAlarmmelder.Core
 
     public sealed class UpdateCheckResult
     {
-        public bool HasUpdate { get; set; } public Version LatestVersion { get; set; } public string TagName { get; set; }
+        public bool HasUpdate { get; set; } public Version LatestVersion { get; set; } public string TagName { get; set; } public string Channel { get; set; }
         public string DownloadUrl { get; set; } public string Digest { get; set; } public string AssetName { get; set; } public bool IsZip { get; set; } public string Error { get; set; }
         public static UpdateCheckResult Failed(string error) { UpdateCheckResult result = new UpdateCheckResult(); result.Error = error; return result; }
     }

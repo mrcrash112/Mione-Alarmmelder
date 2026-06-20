@@ -25,6 +25,7 @@ namespace MioneAlarmmelder.Core
         public bool UpdateEnabled { get; set; }
         public string UpdateRepository { get; set; }
         public string UpdateAssetName { get; set; }
+        public string UpdateChannel { get; set; }
         public int UpdateCheckMinutes { get; set; }
         public int AlarmHistoryLimit { get; set; }
         public int ErrorHistoryLimit { get; set; }
@@ -40,7 +41,7 @@ namespace MioneAlarmmelder.Core
                 AlarmCatalogPath = @"D:\Release\Assets\Mione_AlarmCodes_UK_DE.xlsx",
                 MqttHost = "", MqttPort = 1883, ModemImei = "",
                 TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
-                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateCheckMinutes = 60,
+                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateChannel = "stable", UpdateCheckMinutes = 60,
                 AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500
             };
         }

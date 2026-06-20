@@ -13,7 +13,7 @@ namespace MioneAlarmmelder.Forms
         private TextBox mqttHostBox, mqttPortBox, mqttUserBox, mqttPasswordBox, modemImeiBox;
         private TextBox tcpHostBox, tcpPortBox, pollBox;
         private Button saveButton, testButton, testAlarmButton, urgentTestAlarmButton, pathDialogButton, infoButton;
-        private CheckBox updateEnabledBox; private TextBox updateRepositoryBox, updateAssetBox, updateIntervalBox;
+        private CheckBox updateEnabledBox; private TextBox updateRepositoryBox, updateAssetBox, updateIntervalBox; private ComboBox updateChannelBox;
         private Label updateStatusLabel, currentVersionLabel; private Button updateCheckButton;
         private TabPage overviewPage;
         private ComboBox alarmViewFilter, alarmPriorityFilter; private Button acknowledgeSelectedButton, acknowledgeAllButton; private NumericUpDown alarmLimitBox;
@@ -75,11 +75,15 @@ namespace MioneAlarmmelder.Forms
             updateEnabledBox = AddCheck(updates, "Beim Start automatisch nach Updates suchen", 25);
             updateRepositoryBox = AddUpdateField(updates, "GitHub-Repository", 75); updateAssetBox = AddUpdateField(updates, "Release-Datei", 120);
             updateIntervalBox = AddUpdateField(updates, "Prüfintervall (Min.)", 165);
-            currentVersionLabel = new Label(); currentVersionLabel.Location = new Point(18, 215); currentVersionLabel.Size = new Size(740, 22);
-            updateStatusLabel = new Label(); updateStatusLabel.Location = new Point(18, 245); updateStatusLabel.Size = new Size(740, 55); updateStatusLabel.Text = "Noch nicht geprüft.";
-            updateCheckButton = new Button(); updateCheckButton.Text = "Jetzt nach Updates suchen"; updateCheckButton.Location = new Point(570, 305); updateCheckButton.Size = new Size(220, 32);
+            Label updateChannelLabel = new Label(); updateChannelLabel.Text = "Update-Kanal"; updateChannelLabel.Location = new Point(18, 214); updateChannelLabel.Size = new Size(150, 23);
+            updateChannelBox = new ComboBox(); updateChannelBox.DropDownStyle = ComboBoxStyle.DropDownList; updateChannelBox.Location = new Point(175, 210); updateChannelBox.Size = new Size(180, 23);
+            updateChannelBox.Items.Add("Stable"); updateChannelBox.Items.Add("Beta");
+            currentVersionLabel = new Label(); currentVersionLabel.Location = new Point(18, 250); currentVersionLabel.Size = new Size(740, 22);
+            updateStatusLabel = new Label(); updateStatusLabel.Location = new Point(18, 280); updateStatusLabel.Size = new Size(740, 55); updateStatusLabel.Text = "Noch nicht geprüft.";
+            updateCheckButton = new Button(); updateCheckButton.Text = "Jetzt nach Updates suchen"; updateCheckButton.Location = new Point(570, 340); updateCheckButton.Size = new Size(220, 32);
             Label updateHelp = new Label(); updateHelp.Location = new Point(18, 350); updateHelp.Size = new Size(760, 50); updateHelp.Text = "Im neuesten öffentlichen GitHub-Release muss die angegebene EXE als Asset hinterlegt sein. Der Release-Tag muss z. B. v1.1.0 lauten.";
-            updates.Controls.Add(currentVersionLabel); updates.Controls.Add(updateStatusLabel); updates.Controls.Add(updateCheckButton); updates.Controls.Add(updateHelp);
+            updateHelp.Location = new Point(18, 385); updateHelp.Text = "Stable prüft das neueste öffentliche Release. Beta prüft den GitHub-Release-Tag beta und zeigt Testversionen mit _Beta an.";
+            updates.Controls.Add(updateChannelLabel); updates.Controls.Add(updateChannelBox); updates.Controls.Add(currentVersionLabel); updates.Controls.Add(updateStatusLabel); updates.Controls.Add(updateCheckButton); updates.Controls.Add(updateHelp);
             Panel errorTools = new Panel(); errorTools.Dock = DockStyle.Top; errorTools.Height = 42;
             Label errorViewLabel = new Label(); errorViewLabel.Text = "Anzeige:"; errorViewLabel.Location = new Point(8, 13); errorViewLabel.AutoSize = true;
             errorViewFilter = new ComboBox(); errorViewFilter.DropDownStyle = ComboBoxStyle.DropDownList; errorViewFilter.Location = new Point(65, 9); errorViewFilter.Size = new Size(140, 23);

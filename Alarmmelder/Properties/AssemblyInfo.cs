@@ -7,5 +7,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyProduct("Mione Alarmmelder")]
 [assembly: ComVisible(false)]
 [assembly: Guid("a139ff16-f06a-4be5-af0d-52719527477b")]
-[assembly: AssemblyVersion("1.1.9.14")]
-[assembly: AssemblyFileVersion("1.1.9.14")]
+[assembly: AssemblyVersion("1.1.9.15")]
+[assembly: AssemblyFileVersion("1.1.9.15")]
+[assembly: AssemblyInformationalVersion("1.1.9.15_Beta")]

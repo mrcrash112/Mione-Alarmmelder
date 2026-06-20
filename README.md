@@ -12,6 +12,7 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - unterstützt für MQTT und TCP sowohl IPv4 als auch IPv6
 - sendet für MQTT und TCP alle fünf Sekunden einen JSON-Heartbeat mit wechselndem `true`/`false`-Wert
 - prüft ein konfigurierbares öffentliches GitHub-Repository automatisch auf neue Releases
+- kann im Update-Tab zwischen Stable- und Beta-Kanal wählen
 - wiederholt die Updateprüfung im Hintergrund und markiert verfügbare Updates in der Übersicht mit Priorität `message`
 - zeigt Datei-, Verbindungs-, Heartbeat- und Updatefehler in einem eigenen Protokoll-Tab
 - zeigt unter der TCP-LED den Modemstatus: per Socket anhand der direkten Heartbeat-Verbindung, per MQTT nach einer Rückmeldung mit passender IMEI
@@ -88,4 +89,4 @@ Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute 
 
 ## GitHub-Updates
 
-Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen. Ein Release-Tag muss eine höhere Version als die installierte Anwendung enthalten, zum Beispiel `v1.2.0`. Das Release benötigt standardmäßig ein Asset namens `MioneAlarmmelder.exe`. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.
+Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen und den Kanal wählen. **Stable** prüft das neueste öffentliche GitHub-Release. **Beta** prüft den Release-Tag `beta` und liest die Version aus dem ZIP-Asset, zum Beispiel `MioneAlarmmelder-1.1.9.15_Beta.zip`. Beta-Builds werden in der Oberfläche mit `_Beta` angezeigt. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.

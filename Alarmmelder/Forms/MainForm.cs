@@ -289,7 +289,9 @@ namespace MioneAlarmmelder.Forms
             alarmProgressBox.Checked = settings.ShowAlarmProgress;
             updateEnabledBox.Checked = settings.UpdateEnabled; updateRepositoryBox.Text = settings.UpdateRepository; updateAssetBox.Text = settings.UpdateAssetName;
             updateIntervalBox.Text = settings.UpdateCheckMinutes.ToString();
-            currentVersionLabel.Text = "Installierte Version: " + GitHubUpdateService.CurrentVersion;
+            updateChannelBox.SelectedIndex = String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            currentVersionLabel.Text = "Installierte Version: " + GitHubUpdateService.CurrentDisplayVersion +
+                (GitHubUpdateService.CurrentIsBeta ? " (Beta)" : " (Stable)");
         }
 
         private bool ReadFields()
@@ -307,6 +309,7 @@ namespace MioneAlarmmelder.Forms
             settings.PollSeconds = poll; settings.StartWithWindows = startupBox.Checked;
             settings.ShowAlarmProgress = alarmProgressBox.Checked;
             settings.UpdateEnabled = updateEnabledBox.Checked; settings.UpdateRepository = updateRepositoryBox.Text.Trim(); settings.UpdateAssetName = updateAssetBox.Text.Trim();
+            settings.UpdateChannel = updateChannelBox.SelectedIndex == 1 ? "beta" : "stable";
             if (!Int32.TryParse(updateIntervalBox.Text, out updateMinutes) || updateMinutes < 5) { MessageBox.Show("Das Update-Prüfintervall muss mindestens 5 Minuten betragen.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             settings.UpdateCheckMinutes = updateMinutes;
             if (settings.UpdateEnabled && settings.UpdateRepository.Length > 0 && settings.UpdateRepository.IndexOf('/') < 1) { MessageBox.Show("Das GitHub-Repository muss im Format Besitzer/Repository angegeben werden.", "Ungültige Updatequelle", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }

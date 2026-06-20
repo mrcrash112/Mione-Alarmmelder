@@ -35,6 +35,7 @@ namespace MioneAlarmmelder.Core
                 s.UpdateEnabled = GetBool(d, "UpdateEnabled", true);
                 s.UpdateRepository = Get(d, "UpdateRepository", "mrcrash112/Mione-Alarmmelder");
                 s.UpdateAssetName = Get(d, "UpdateAssetName", "MioneAlarmmelder-*.zip");
+                s.UpdateChannel = Get(d, "UpdateChannel", "stable").ToLowerInvariant() == "beta" ? "beta" : "stable";
                 s.UpdateCheckMinutes = Math.Max(5, GetInt(d, "UpdateCheckMinutes", 60));
                 s.AlarmHistoryLimit = Limit(GetInt(d, "AlarmHistoryLimit", 2500)); s.ErrorHistoryLimit = Limit(GetInt(d, "ErrorHistoryLimit", 2500));
                 MigrateOldDefaults(s);
@@ -64,6 +65,7 @@ namespace MioneAlarmmelder.Core
                 Write(w, "StartWithWindows", s.StartWithWindows.ToString());
                 Write(w, "UpdateEnabled", s.UpdateEnabled.ToString()); Write(w, "UpdateRepository", s.UpdateRepository);
                 Write(w, "UpdateAssetName", s.UpdateAssetName);
+                Write(w, "UpdateChannel", s.UpdateChannel);
                 Write(w, "UpdateCheckMinutes", s.UpdateCheckMinutes.ToString());
                 Write(w, "AlarmHistoryLimit", s.AlarmHistoryLimit.ToString()); Write(w, "ErrorHistoryLimit", s.ErrorHistoryLimit.ToString());
                 w.WriteEndElement();

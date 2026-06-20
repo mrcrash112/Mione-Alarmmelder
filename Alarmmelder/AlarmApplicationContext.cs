@@ -202,7 +202,7 @@ namespace MioneAlarmmelder
             {
                 if (manual) main.SetUpdateStatus("Eine Updateprüfung läuft bereits."); return;
             }
-            main.SetUpdateStatus("GitHub wird geprüft ...");
+            main.SetUpdateStatus("GitHub wird geprüft (" + (String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase) ? "Beta" : "Stable") + ") ...");
             GitHubUpdateService.CheckAsync(settings, delegate(UpdateCheckResult result)
             {
                 Interlocked.Exchange(ref updateCheckPending, 0);
@@ -218,11 +218,11 @@ namespace MioneAlarmmelder
                     }
                     if (!result.HasUpdate)
                     {
-                        main.SetUpdateStatus("Die installierte Version ist aktuell (" + GitHubUpdateService.CurrentVersion + ").");
+                        main.SetUpdateStatus("Die installierte Version ist aktuell (" + GitHubUpdateService.CurrentDisplayVersion + ", " + (String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase) ? "Beta" : "Stable") + ").");
                         if (manual) MessageBox.Show("Es ist kein neueres Release verfügbar.", "Updateprüfung", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
-                    main.SetUpdateStatus("Neue Version verfügbar: " + result.TagName);
+                    main.SetUpdateStatus("Neue " + (String.Equals(result.Channel, "beta", StringComparison.OrdinalIgnoreCase) ? "Beta" : "Stable") + "-Version verfügbar: " + result.TagName);
                     if (!String.Equals(notifiedUpdateTag, result.TagName, StringComparison.OrdinalIgnoreCase))
                     {
                         notifiedUpdateTag = result.TagName; main.ShowUpdateNotification(result.TagName);

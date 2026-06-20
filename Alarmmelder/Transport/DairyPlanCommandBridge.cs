@@ -24,7 +24,9 @@ namespace MioneAlarmmelder.Transport
                 if (!File.Exists(ior)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "DP_RDM_COM.ior wurde nicht gefunden: " + ior);
                 if (!File.Exists(bridgeJar)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "MioneDairyPlanBridge.jar wurde nicht gefunden: " + bridgeJar);
 
-                StartDpProcessControlIfNeeded(root);
+                DairyPlanCommandResult waitResult = WaitForDpProcessControl();
+                if (waitResult != null) return waitResult;
+
                 string java = FindJava(root);
                 string classPath = rdmJar + Path.PathSeparator + bridgeJar;
                 string args = "-cp " + Quote(classPath) + " MioneDairyPlanBridge --ior " + Quote(ior) + " --command " + Quote(command.Name) +
@@ -75,24 +77,23 @@ namespace MioneAlarmmelder.Transport
             return "java.exe";
         }
 
-        private static void StartDpProcessControlIfNeeded(string root)
+        private static DairyPlanCommandResult WaitForDpProcessControl()
         {
-            try
+            DateTime deadline = DateTime.UtcNow.AddSeconds(60);
+            while (DateTime.UtcNow < deadline)
             {
-                if (Process.GetProcessesByName("DPProcessControl").Length > 0) return;
-                string open = Path.Combine(root, "open.exe");
-                string exe = Path.Combine(root, "DPProcessControl.exe");
-                ProcessStartInfo start = new ProcessStartInfo();
-                start.WorkingDirectory = root; start.UseShellExecute = false; start.CreateNoWindow = true;
-                if (File.Exists(open)) { start.FileName = open; start.Arguments = "DPProcessControl.exe"; }
-                else { start.FileName = exe; start.Arguments = ""; }
-                Process.Start(start);
-                System.Threading.Thread.Sleep(3000);
+                try
+                {
+                    if (Process.GetProcessesByName("DPProcessControl").Length > 0) return null;
+                }
+                catch (Exception ex)
+                {
+                    ErrorLogger.Log("DPProcessControl-Pruefung", ex);
+                    return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "DPProcessControl konnte nicht geprueft werden: " + ex.Message);
+                }
+                System.Threading.Thread.Sleep(1000);
             }
-            catch (Exception ex)
-            {
-                ErrorLogger.Log("DPProcessControl-Start", ex);
-            }
+            return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "DPProcessControl laeuft noch nicht. Der Alarmmelder startet DairyPlan nicht selbst und wartet auf den Systemstart.");
         }
 
         private static string AppDirectory()

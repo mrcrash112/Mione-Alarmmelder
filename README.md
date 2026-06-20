@@ -109,8 +109,11 @@ MQTT veröffentlicht wurde.
 Gültige Befehle werden über `Assets\MioneDairyPlanBridge.jar` und
 `rdm-manager.jar` an die CORBA-Schnittstelle von DPProcessControl übergeben.
 Auf dem DairyPlan-Rechner muss dafür Java 6 bis Java 8 verfügbar sein, da neuere
-Java-Versionen die benötigten CORBA-Klassen nicht mehr enthalten. Die Bridge
-erwartet `RDM\CORBA\DP_RDM_COM.ior` im konfigurierten DairyPln-Pfad.
+Java-Versionen die benötigten CORBA-Klassen nicht mehr enthalten. Der
+Alarmmelder startet `rdm-manager.jar` und `DPProcessControl.exe` nicht selbst,
+sondern wartet bis zu 60 Sekunden darauf, dass `DPProcessControl` bereits vom
+System gestartet wurde. Die Bridge erwartet `RDM\CORBA\DP_RDM_COM.ior` im
+konfigurierten DairyPln-Pfad.
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 

@@ -36,9 +36,37 @@ namespace MioneAlarmmelder.Transport
             catch { return false; }
         }
 
+        public static bool TryParseModemStatus(string json, string source, out AlarmProgressEvent value)
+        {
+            value = null;
+            try
+            {
+                Dictionary<string, object> data = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+                string type = Text(data, "type");
+                if (type != "modemStatus" && type != "heartbeat" && type != "status") return false;
+                string modemImei = Text(data, "modemImei");
+                if (modemImei.Length == 0) return false;
+                string status = Text(data, "status");
+                if (status.Length == 0) status = Truthy(data, "online") || Truthy(data, "active") || Truthy(data, "value") ? "aktiv" : "online";
+                value = new AlarmProgressEvent
+                {
+                    ModemImei = modemImei, Status = status, Timestamp = Text(data, "timestamp"), Source = source ?? "",
+                    Action = "Modemstatus", Number = "-"
+                };
+                return true;
+            }
+            catch { return false; }
+        }
+
         private static string Text(Dictionary<string, object> data, string key)
         {
             object value; return data.TryGetValue(key, out value) && value != null ? Convert.ToString(value) : "";
+        }
+        private static bool Truthy(Dictionary<string, object> data, string key)
+        {
+            object value; if (!data.TryGetValue(key, out value) || value == null) return false;
+            if (value is bool) return (bool)value;
+            string text = Convert.ToString(value); return text == "1" || String.Equals(text, "true", StringComparison.OrdinalIgnoreCase) || String.Equals(text, "aktiv", StringComparison.OrdinalIgnoreCase) || String.Equals(text, "online", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

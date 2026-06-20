@@ -41,7 +41,7 @@ namespace MioneAlarmmelder.Transport
                 activeClient = client; client.ReceiveTimeout = 5000; client.SendTimeout = 5000;
                 SendConnect(stream); byte header; byte[] body; ReadPacket(stream, out header, out body);
                 if ((header >> 4) != 2 || body.Length < 2 || body[1] != 0) throw new IOException("MQTT-Anmeldung für Alarmstatus abgelehnt.");
-                SendSubscribe(stream, Topic()); ReadPacket(stream, out header, out body);
+                SendSubscribe(stream, new string[] { Topic("MiOne/AlarmStatus"), Topic("MiOne/ModemStatus") }); ReadPacket(stream, out header, out body);
                 if ((header >> 4) != 9) throw new IOException("MQTT-Alarmstatus konnte nicht abonniert werden.");
                 client.ReceiveTimeout = 15000;
                 while (!stopping)
@@ -68,7 +68,7 @@ namespace MioneAlarmmelder.Transport
             if (topicLength < 1 || offset > body.Length) return;
             string json = Encoding.UTF8.GetString(body, offset, body.Length - offset);
             AlarmProgressEvent value;
-            if (!AlarmProgressEvent.TryParse(json, "MQTT", out value)) return;
+            if (!AlarmProgressEvent.TryParse(json, "MQTT", out value) && !AlarmProgressEvent.TryParseModemStatus(json, "MQTT", out value)) return;
             if (!String.Equals(value.ModemImei, settings.ModemImei, StringComparison.Ordinal)) return;
             if (ProgressReceived != null) ProgressReceived(this, value);
         }
@@ -85,17 +85,18 @@ namespace MioneAlarmmelder.Transport
             SendPacket(stream, 0x10, body.ToArray());
         }
 
-        private void SendSubscribe(Stream stream, string topic)
+        private void SendSubscribe(Stream stream, string[] topics)
         {
-            MemoryStream body = new MemoryStream(); body.WriteByte(0); body.WriteByte(1); WriteString(body, topic); body.WriteByte(0);
+            MemoryStream body = new MemoryStream(); body.WriteByte(0); body.WriteByte(1);
+            for (int i = 0; i < topics.Length; i++) { WriteString(body, topics[i]); body.WriteByte(0); }
             SendPacket(stream, 0x82, body.ToArray());
         }
 
-        private string Topic()
+        private string Topic(string subTopic)
         {
             string user = (settings.MqttUser ?? "").Trim().Trim('/');
             if (user.Length == 0) throw new InvalidOperationException("MQTT-Benutzername/Top-Topic fehlt.");
-            return user + "/MiOne/AlarmStatus";
+            return user + "/" + subTopic.TrimStart('/');
         }
 
         private static void ReadPacket(Stream stream, out byte header, out byte[] body)

@@ -66,8 +66,16 @@ namespace MioneAlarmmelder
         }
         private void AlarmProgressReceived(object sender, AlarmProgressEvent e)
         {
-            if (String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase)) mqttModemActive = true;
-            main.SetModemStatus(e.Source, "aktiv", MonitorState.Ok); main.ShowAlarmProgress(e);
+            MonitorState state = ModemState(e.Status);
+            if (String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase)) mqttModemActive = state == MonitorState.Ok;
+            main.SetModemStatus(e.Source, e.Status.Length == 0 ? "aktiv" : e.Status, state);
+            if (!String.Equals(e.Action, "Modemstatus", StringComparison.OrdinalIgnoreCase)) main.ShowAlarmProgress(e);
+        }
+        private static MonitorState ModemState(string status)
+        {
+            string text = (status ?? "").ToLowerInvariant();
+            if (text.IndexOf("offline") >= 0 || text.IndexOf("fehler") >= 0 || text.IndexOf("error") >= 0 || text.IndexOf("nicht") >= 0) return MonitorState.Error;
+            return MonitorState.Ok;
         }
         private void MonitorStatusChanged(object sender, MonitorStatusEventArgs e) { if (e.State == MonitorState.Error) { ErrorLogger.Log("Dateiüberwachung", e.Text); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); } else main.SetStatus(e.Text, e.State); }
         private void PhonesChanged(object sender, EventArgs e)

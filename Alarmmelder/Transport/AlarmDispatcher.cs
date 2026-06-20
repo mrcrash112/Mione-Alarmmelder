@@ -81,7 +81,8 @@ namespace MioneAlarmmelder.Transport
             ThreadPool.QueueUserWorkItem(delegate
             {
                 int sent = 0; StringBuilder errors = new StringBuilder(); bool mqttSuccessful = false, tcpSuccessful = false; string mqttError = "", tcpError = "";
-                string json = BuildMobileJson(values, snapshot.ModemImei);
+                string modemStatusTopic = snapshot.MqttEnabled && !String.IsNullOrEmpty(snapshot.MqttUser) ? Topic(snapshot.MqttUser, "MiOne/ModemStatus") : "";
+                string json = BuildMobileJson(values, snapshot.ModemImei, modemStatusTopic);
                 if (snapshot.MqttEnabled)
                 {
                     try
@@ -115,9 +116,10 @@ namespace MioneAlarmmelder.Transport
             StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "type", "heartbeat"); b.Append(','); Add(b, "modemImei", modemImei); b.Append(',').Append("\"value\":").Append(value ? "true" : "false").Append(','); Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
             b.Append("}"); return b.ToString();
         }
-        private static string BuildMobileJson(MobileNumberConfig[] mobiles, string modemImei)
+        private static string BuildMobileJson(MobileNumberConfig[] mobiles, string modemImei, string modemStatusTopic)
         {
-            StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "modemImei", modemImei); b.Append(",\"mobile\":[");
+            StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "modemImei", modemImei); b.Append(',');
+            Add(b, "modemStatusTopic", modemStatusTopic); b.Append(",\"mobile\":[");
             for (int i = 0; i < mobiles.Length; i++)
             {
                 if (i > 0) b.Append(','); b.Append('{'); b.Append("\"slot\":").Append(mobiles[i].Slot).Append(',');

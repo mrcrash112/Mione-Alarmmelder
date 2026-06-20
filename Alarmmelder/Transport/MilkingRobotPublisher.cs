@@ -36,7 +36,7 @@ namespace MioneAlarmmelder.Transport
             { "setManualMilkingOneBox", "Box auf manuelles Melken setzen", "PSU_Command.setManualMilkingOneBox", "boxNumber" },
             { "setAutomaticMilkingOneBox", "Box auf automatisches Melken setzen", "PSU_Command.setAutomaticMilkingOneBox", "boxNumber" },
             { "moveRobotToPosition", "Roboterposition anfahren", "PSU_Command.moveRobotToPosition", "robotPosition" },
-            { "startAugerCalibration", "Dosierer-Kalibrierung starten", "PSU_Command.startAugerCalibration", "boxNumber" },
+            { "startAugerCalibration", "Dosierer-Kalibrierung starten", "PSU_Command.startAugerCalibration", "boxNumber,feedingType" },
             { "stopAugerCalibration", "Dosierer-Kalibrierung stoppen", "PSU_Command.stopAugerCalibration", "boxNumber" },
             { "startPreparationWaterTanks", "Wassertanks vorbereiten", "PSU_Command.startPreparationWaterTanks", "" },
             { "resetAlarm", "Alarm zuruecksetzen", "PSU_Command.resetAlarm", "" },
@@ -183,6 +183,7 @@ namespace MioneAlarmmelder.Transport
             Add(b, "boxNumber", command == null ? "" : command.BoxNumber); b.Append(',');
             Add(b, "robotPosition", command == null ? "" : command.RobotPosition); b.Append(',');
             Add(b, "samplingBox", command == null ? "" : command.SamplingBox); b.Append(',');
+            Add(b, "feedingType", command == null ? "" : command.FeedingType); b.Append(',');
             AppendRequiredParameterNames(b, command == null ? new string[0] : RequiredParametersFor(command.Name));
             b.Append('}');
             return b.ToString();

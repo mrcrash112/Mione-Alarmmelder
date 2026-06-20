@@ -106,6 +106,11 @@ auf `<Benutzername>/Melkroboter/Result`; fehlende Parameter werden dort als
 Im Tab **Funktionslog** zeigt MiOne jeden empfangenen Melkroboter-Befehl mit
 Topic, Funktion, Parametern, Validierungsstatus und ob das Result wieder per
 MQTT veröffentlicht wurde.
+Gültige Befehle werden über `Assets\MioneDairyPlanBridge.jar` und
+`rdm-manager.jar` an die CORBA-Schnittstelle von DPProcessControl übergeben.
+Auf dem DairyPlan-Rechner muss dafür Java 6 bis Java 8 verfügbar sein, da neuere
+Java-Versionen die benötigten CORBA-Klassen nicht mehr enthalten. Die Bridge
+erwartet `RDM\CORBA\DP_RDM_COM.ior` im konfigurierten DairyPln-Pfad.
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 

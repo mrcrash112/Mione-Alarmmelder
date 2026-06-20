@@ -431,6 +431,7 @@ namespace MioneAlarmmelder.Forms
                 if (!String.IsNullOrEmpty(command.BoxNumber)) parameters += "box=" + command.BoxNumber;
                 if (!String.IsNullOrEmpty(command.RobotPosition)) parameters += (parameters.Length > 0 ? ", " : "") + "position=" + command.RobotPosition;
                 if (!String.IsNullOrEmpty(command.SamplingBox)) parameters += (parameters.Length > 0 ? ", " : "") + "sampling=" + command.SamplingBox;
+                if (!String.IsNullOrEmpty(command.FeedingType)) parameters += (parameters.Length > 0 ? ", " : "") + "feeding=" + command.FeedingType;
             }
             ListViewItem item = new ListViewItem(value.Time.ToString("HH:mm:ss"));
             item.SubItems.Add(value.ReceivedTopic);

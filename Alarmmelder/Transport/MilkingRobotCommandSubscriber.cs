@@ -12,12 +12,13 @@ namespace MioneAlarmmelder.Transport
     public sealed class MilkingRobotCommandSubscriber : IDisposable
     {
         private readonly AppSettings settings;
+        private readonly DairyPlanCommandBridge dairyPlanBridge;
         private volatile bool stopping;
         private Thread worker;
         private TcpClient activeClient;
         public event EventHandler<MilkingRobotCommandEventArgs> CommandReceived;
 
-        public MilkingRobotCommandSubscriber(AppSettings settings) { this.settings = settings; }
+        public MilkingRobotCommandSubscriber(AppSettings settings) { this.settings = settings; dairyPlanBridge = new DairyPlanCommandBridge(settings); }
 
         public void Start()
         {
@@ -108,8 +109,9 @@ namespace MioneAlarmmelder.Transport
             if (!valid) { state = "invalidCommand"; message = "Unbekannte Melkroboter-Funktion."; return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message); }
             string missing = MissingParameter(command);
             if (missing.Length > 0) { state = "invalidParameters"; message = "Parameter fehlt: " + missing; return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message); }
-            state = "pendingNativeBridge"; message = "Native DPProcessControl-Uebergabe ist noch nicht aktiv. Befehl wurde empfangen und validiert.";
-            return MilkingRobotPublisher.BuildCommandResultJson(command, false, state, message);
+            DairyPlanCommandResult bridgeResult = dairyPlanBridge.Execute(command);
+            ok = bridgeResult.Success; state = bridgeResult.State; message = bridgeResult.Message;
+            return MilkingRobotPublisher.BuildCommandResultJson(command, ok, state, message);
         }
 
         private void OnCommandReceived(MilkingRobotCommandEventArgs e)
@@ -197,6 +199,7 @@ namespace MioneAlarmmelder.Transport
         public string BoxNumber = "";
         public string RobotPosition = "";
         public string SamplingBox = "";
+        public string FeedingType = "";
         public string RawPayload = "";
 
         public string Parameter(string name)
@@ -204,6 +207,7 @@ namespace MioneAlarmmelder.Transport
             if (String.Equals(name, "boxNumber", StringComparison.OrdinalIgnoreCase)) return BoxNumber;
             if (String.Equals(name, "robotPosition", StringComparison.OrdinalIgnoreCase)) return RobotPosition;
             if (String.Equals(name, "samplingBox", StringComparison.OrdinalIgnoreCase)) return SamplingBox;
+            if (String.Equals(name, "feedingType", StringComparison.OrdinalIgnoreCase)) return FeedingType;
             return "";
         }
 
@@ -219,6 +223,7 @@ namespace MioneAlarmmelder.Transport
                 command.BoxNumber = Text(values, "boxNumber"); if (command.BoxNumber.Length == 0) command.BoxNumber = Text(values, "box");
                 command.RobotPosition = Text(values, "robotPosition");
                 command.SamplingBox = Text(values, "samplingBox");
+                command.FeedingType = Text(values, "feedingType");
             }
             catch { }
             return command;

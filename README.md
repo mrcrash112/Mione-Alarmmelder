@@ -106,6 +106,18 @@ auf `<Benutzername>/Melkroboter/Result`; fehlende Parameter werden dort als
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 
+### MQTT-Testprogramm auf macOS
+
+Das Skript `tools/mqtt_test.py` kann ohne externe Python-Pakete MQTT 3.1.1
+publishen und abonnieren. Beispiele:
+
+```bash
+python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer functions
+python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer command stopMilking --box 1
+python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer listen Melkroboter/Result
+python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer alarm --modem-imei 123456789012345
+```
+
 ## GitHub-Updates
 
 Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen und den Kanal wählen. **Stable** prüft das neueste öffentliche GitHub-Release. **Beta** prüft den Release-Tag `beta` und liest die Version aus dem ZIP-Asset, zum Beispiel `MioneAlarmmelder-1.1.9.15_Beta.zip`. Beta-Builds werden in der Oberfläche mit `_Beta` angezeigt. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.

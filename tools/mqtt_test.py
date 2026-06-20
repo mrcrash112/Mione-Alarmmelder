@@ -56,6 +56,17 @@ def read_packet(sock):
     return first[0], bytes(body)
 
 
+def mqtt_connect_error(code):
+    errors = {
+        1: "ungueltige Protokollversion",
+        2: "Client-ID abgelehnt",
+        3: "Server nicht verfuegbar",
+        4: "Benutzername oder Passwort falsch",
+        5: "nicht autorisiert",
+    }
+    return errors.get(code, "unbekannter Fehler")
+
+
 class MqttClient:
     def __init__(self, host, port, username, password, timeout):
         self.host = host
@@ -86,7 +97,8 @@ class MqttClient:
         header, response = read_packet(self.sock)
         if header >> 4 != 2 or len(response) < 2 or response[1] != 0:
             code = response[1] if len(response) > 1 else "?"
-            raise RuntimeError("MQTT-Anmeldung abgelehnt: %s" % code)
+            detail = mqtt_connect_error(code) if isinstance(code, int) else "keine Antwortkennung"
+            raise RuntimeError("MQTT-Anmeldung abgelehnt: %s (%s)" % (code, detail))
         return self
 
     def __exit__(self, exc_type, exc, tb):

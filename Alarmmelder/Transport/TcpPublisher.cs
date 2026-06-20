@@ -18,6 +18,29 @@ namespace MioneAlarmmelder.Transport
             }
         }
 
+        public static void PublishWithProgress(string host, int port, string json, Action<AlarmProgressEvent> progress, int waitMilliseconds)
+        {
+            using (TcpClient client = Connect(host, port, 5000))
+            using (NetworkStream stream = client.GetStream())
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(json + "\r\n");
+                stream.Write(bytes, 0, bytes.Length); stream.Flush();
+                client.ReceiveTimeout = Math.Max(1000, waitMilliseconds);
+                DateTime until = DateTime.UtcNow.AddMilliseconds(waitMilliseconds);
+                using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    while (DateTime.UtcNow < until)
+                    {
+                        string line = reader.ReadLine();
+                        if (line == null) break;
+                        AlarmProgressEvent value;
+                        if (AlarmProgressEvent.TryParse(line, "TCP", out value) && progress != null) progress(value);
+                        if (line.IndexOf("\"type\":\"alarmResult\"", StringComparison.Ordinal) >= 0) break;
+                    }
+                }
+            }
+        }
+
         internal static TcpClient Connect(string host, int port, int timeout)
         {
             IPAddress[] addresses = Dns.GetHostAddresses(host); Exception lastError = null;

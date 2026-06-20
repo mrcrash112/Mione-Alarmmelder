@@ -18,7 +18,9 @@ namespace MioneAlarmmelder.Transport
                 SendConnect(stream, user, password);
                 byte[] answer = new byte[4]; ReadFully(stream, answer, 0, 4);
                 if (answer[0] != 0x20 || answer[1] != 0x02 || answer[3] != 0x00) throw new IOException("MQTT-Anmeldung abgelehnt (Code " + answer[3] + ").");
-                SendPublish(stream, topic, payload);
+                bool retain = topic.EndsWith("/MiOne/Config/Mobile", StringComparison.Ordinal) ||
+                              topic.EndsWith("/MiOne/Config/Mobile/modemImei", StringComparison.Ordinal);
+                SendPublish(stream, topic, payload, retain);
                 stream.WriteByte(0xE0); stream.WriteByte(0x00); stream.Flush();
             }
         }
@@ -37,11 +39,11 @@ namespace MioneAlarmmelder.Transport
             SendPacket(stream, 0x10, body.ToArray());
         }
 
-        private static void SendPublish(Stream stream, string topic, string payload)
+        private static void SendPublish(Stream stream, string topic, string payload, bool retain)
         {
             MemoryStream body = new MemoryStream(); WriteString(body, topic);
             byte[] data = Encoding.UTF8.GetBytes(payload); body.Write(data, 0, data.Length);
-            SendPacket(stream, 0x30, body.ToArray());
+            SendPacket(stream, (byte)(retain ? 0x31 : 0x30), body.ToArray());
         }
 
         private static void SendPacket(Stream stream, byte header, byte[] body)

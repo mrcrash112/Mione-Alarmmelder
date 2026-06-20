@@ -23,21 +23,27 @@
   <ItemGroup>
     <Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Data" />
     <Reference Include="System.Drawing" /><Reference Include="System.Security" /><Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" /><Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Xml" /><Reference Include="System.Web.Extensions" /><Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" /><Compile Include="AlarmApplicationContext.cs" />
     <Compile Include="Core\AlarmMessage.cs" /><Compile Include="Core\AppSettings.cs" />
     <Compile Include="Core\EmbeddedImages.cs" />
     <Compile Include="Core\ErrorLogger.cs" />
+    <Compile Include="Core\AlarmHistoryStore.cs" />
+    <Compile Include="Core\ExcelAlarmCatalog.cs" />
     <Compile Include="Core\FileMonitorService.cs" /><Compile Include="Core\PropertiesFile.cs" />
     <Compile Include="Core\SettingsStore.cs" /><Compile Include="Core\StartupRegistration.cs" />
     <Compile Include="Core\GitHubUpdateService.cs" />
     <Compile Include="Transport\AlarmDispatcher.cs" /><Compile Include="Transport\MqttPublisher.cs" />
     <Compile Include="Transport\TcpPublisher.cs" />
+    <Compile Include="Transport\AlarmProgressEvent.cs" />
+    <Compile Include="Transport\MqttProgressSubscriber.cs" />
     <Compile Include="Forms\MainForm.cs"><SubType>Form</SubType></Compile>
     <Compile Include="Forms\MainForm.Designer.cs"><DependentUpon>MainForm.cs</DependentUpon></Compile>
     <Compile Include="Forms\PathSettingsForm.cs"><SubType>Form</SubType></Compile>
+    <Compile Include="Forms\InfoForm.cs"><SubType>Form</SubType></Compile>
+    <Compile Include="Forms\AlarmProgressForm.cs"><SubType>Form</SubType></Compile>
     <Compile Include="Forms\SplashForm.cs"><SubType>Form</SubType></Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -46,6 +52,7 @@
     <EmbeddedResource Include="Assets\logo.png"><LogicalName>MioneAlarmmelder.Assets.logo.png</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="Assets\Banner.png"><LogicalName>MioneAlarmmelder.Assets.Banner.png</LogicalName></EmbeddedResource>
     <Content Include="Assets\translations_de.properties"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Assets\Mione_AlarmCodes_UK_DE.xlsx"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

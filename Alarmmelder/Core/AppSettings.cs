@@ -9,22 +9,25 @@ namespace MioneAlarmmelder.Core
         public string AlarmSettingsPath { get; set; }
         public string PriorityPath { get; set; }
         public string TranslationPath { get; set; }
+        public string AlarmCatalogPath { get; set; }
         public bool MqttEnabled { get; set; }
         public string MqttHost { get; set; }
         public int MqttPort { get; set; }
-        public string MqttTopic { get; set; }
         public string MqttUser { get; set; }
         public string MqttPassword { get; set; }
+        public string ModemImei { get; set; }
         public bool TcpEnabled { get; set; }
         public string TcpHost { get; set; }
         public int TcpPort { get; set; }
-        public string CustomerId { get; set; }
+        public bool ShowAlarmProgress { get; set; }
         public int PollSeconds { get; set; }
-        public int HeartbeatSeconds { get; set; }
         public bool StartWithWindows { get; set; }
         public bool UpdateEnabled { get; set; }
         public string UpdateRepository { get; set; }
         public string UpdateAssetName { get; set; }
+        public int UpdateCheckMinutes { get; set; }
+        public int AlarmHistoryLimit { get; set; }
+        public int ErrorHistoryLimit { get; set; }
 
         public static AppSettings CreateDefault()
         {
@@ -34,9 +37,11 @@ namespace MioneAlarmmelder.Core
                 AlarmSettingsPath = @"D:\DairyPln\RDM\configuration\preferences\user\alarmssettings.properties",
                 PriorityPath = @"D:\DairyPln\RDM\configuration\data\rdm\useralarmpriorities.properties",
                 TranslationPath = @"D:\Release\Assets\translations_de.properties",
-                MqttHost = "", MqttPort = 1883, MqttTopic = "mione/{kunde}/alarm",
-                TcpHost = "", TcpPort = 5000, CustomerId = "", PollSeconds = 2, HeartbeatSeconds = 60,
-                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder.exe"
+                AlarmCatalogPath = @"D:\Release\Assets\Mione_AlarmCodes_UK_DE.xlsx",
+                MqttHost = "", MqttPort = 1883, ModemImei = "",
+                TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
+                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder.exe", UpdateCheckMinutes = 60,
+                AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500
             };
         }
 
@@ -47,6 +52,7 @@ namespace MioneAlarmmelder.Core
             if (!File.Exists(AlarmSettingsPath)) missing.Add("Alarm-Einstellungen");
             if (!File.Exists(PriorityPath)) missing.Add("Alarm-Prioritäten");
             if (!File.Exists(TranslationPath)) missing.Add("Übersetzungen");
+            if (!File.Exists(AlarmCatalogPath)) missing.Add("Alarmcode-Arbeitsmappe");
             return missing.ToArray();
         }
     }

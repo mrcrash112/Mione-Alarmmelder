@@ -22,17 +22,21 @@ namespace MioneAlarmmelder.Core
                 s.AlarmSettingsPath = Get(d, "AlarmSettingsPath", s.AlarmSettingsPath);
                 s.PriorityPath = Get(d, "PriorityPath", s.PriorityPath);
                 s.TranslationPath = Get(d, "TranslationPath", s.TranslationPath);
+                s.AlarmCatalogPath = Get(d, "AlarmCatalogPath", s.AlarmCatalogPath);
                 s.MqttEnabled = GetBool(d, "MqttEnabled", false); s.MqttHost = Get(d, "MqttHost", "");
-                s.MqttPort = GetInt(d, "MqttPort", 1883); s.MqttTopic = Get(d, "MqttTopic", s.MqttTopic);
+                s.MqttPort = GetInt(d, "MqttPort", 1883);
                 s.MqttUser = Get(d, "MqttUser", ""); s.MqttPassword = Unprotect(Get(d, "MqttPassword", ""));
+                s.ModemImei = Get(d, "ModemImei", Get(d, "ModemSerialNumber", ""));
                 s.TcpEnabled = GetBool(d, "TcpEnabled", false); s.TcpHost = Get(d, "TcpHost", "");
-                s.TcpPort = GetInt(d, "TcpPort", 5000); s.CustomerId = Get(d, "CustomerId", "");
+                s.TcpPort = GetInt(d, "TcpPort", 5000);
+                s.ShowAlarmProgress = GetBool(d, "ShowAlarmProgress", true);
                 s.PollSeconds = Math.Max(1, GetInt(d, "PollSeconds", 2));
-                s.HeartbeatSeconds = Math.Max(10, GetInt(d, "HeartbeatSeconds", 60));
                 s.StartWithWindows = GetBool(d, "StartWithWindows", false);
                 s.UpdateEnabled = GetBool(d, "UpdateEnabled", true);
                 s.UpdateRepository = Get(d, "UpdateRepository", "mrcrash112/Mione-Alarmmelder");
                 s.UpdateAssetName = Get(d, "UpdateAssetName", "MioneAlarmmelder.exe");
+                s.UpdateCheckMinutes = Math.Max(5, GetInt(d, "UpdateCheckMinutes", 60));
+                s.AlarmHistoryLimit = Limit(GetInt(d, "AlarmHistoryLimit", 2500)); s.ErrorHistoryLimit = Limit(GetInt(d, "ErrorHistoryLimit", 2500));
                 MigrateOldDefaults(s);
             }
             catch { return AppSettings.CreateDefault(); }
@@ -48,15 +52,20 @@ namespace MioneAlarmmelder.Core
                 w.WriteStartElement("settings");
                 Write(w, "MessageLogPath", s.MessageLogPath); Write(w, "AlarmSettingsPath", s.AlarmSettingsPath);
                 Write(w, "PriorityPath", s.PriorityPath); Write(w, "TranslationPath", s.TranslationPath);
+                Write(w, "AlarmCatalogPath", s.AlarmCatalogPath);
                 Write(w, "MqttEnabled", s.MqttEnabled.ToString()); Write(w, "MqttHost", s.MqttHost);
-                Write(w, "MqttPort", s.MqttPort.ToString()); Write(w, "MqttTopic", s.MqttTopic);
+                Write(w, "MqttPort", s.MqttPort.ToString());
                 Write(w, "MqttUser", s.MqttUser); Write(w, "MqttPassword", Protect(s.MqttPassword));
+                Write(w, "ModemImei", s.ModemImei);
                 Write(w, "TcpEnabled", s.TcpEnabled.ToString()); Write(w, "TcpHost", s.TcpHost);
-                Write(w, "TcpPort", s.TcpPort.ToString()); Write(w, "CustomerId", s.CustomerId);
-                Write(w, "PollSeconds", s.PollSeconds.ToString()); Write(w, "HeartbeatSeconds", s.HeartbeatSeconds.ToString());
+                Write(w, "TcpPort", s.TcpPort.ToString());
+                Write(w, "ShowAlarmProgress", s.ShowAlarmProgress.ToString());
+                Write(w, "PollSeconds", s.PollSeconds.ToString());
                 Write(w, "StartWithWindows", s.StartWithWindows.ToString());
                 Write(w, "UpdateEnabled", s.UpdateEnabled.ToString()); Write(w, "UpdateRepository", s.UpdateRepository);
                 Write(w, "UpdateAssetName", s.UpdateAssetName);
+                Write(w, "UpdateCheckMinutes", s.UpdateCheckMinutes.ToString());
+                Write(w, "AlarmHistoryLimit", s.AlarmHistoryLimit.ToString()); Write(w, "ErrorHistoryLimit", s.ErrorHistoryLimit.ToString());
                 w.WriteEndElement();
             }
         }
@@ -64,6 +73,7 @@ namespace MioneAlarmmelder.Core
         private static string Get(XmlDocument d, string name, string fallback) { XmlNode n = d.SelectSingleNode("/settings/" + name); return n == null ? fallback : n.InnerText; }
         private static bool GetBool(XmlDocument d, string n, bool f) { bool v; return Boolean.TryParse(Get(d, n, ""), out v) ? v : f; }
         private static int GetInt(XmlDocument d, string n, int f) { int v; return Int32.TryParse(Get(d, n, ""), out v) ? v : f; }
+        private static int Limit(int value) { return Math.Max(100, Math.Min(10000, value)); }
         private static void Write(XmlWriter w, string n, string v) { w.WriteElementString(n, v ?? ""); }
         private static string Protect(string value) { if (String.IsNullOrEmpty(value)) return ""; return Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser)); }
         private static string Unprotect(string value) { try { return String.IsNullOrEmpty(value) ? "" : Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), null, DataProtectionScope.CurrentUser)); } catch { return ""; } }

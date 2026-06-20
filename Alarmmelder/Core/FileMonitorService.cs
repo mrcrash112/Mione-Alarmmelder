@@ -19,10 +19,15 @@ namespace MioneAlarmmelder.Core
         private DateTime settingsStamp = DateTime.MinValue;
         private DateTime priorityStamp = DateTime.MinValue;
         private DateTime translationStamp = DateTime.MinValue;
+        private DateTime catalogStamp = DateTime.MinValue;
         private Dictionary<string, string> phones = new Dictionary<string, string>();
         private Dictionary<string, string> active = new Dictionary<string, string>();
         private Dictionary<string, string> priorities = new Dictionary<string, string>();
         private Dictionary<string, string> translations = new Dictionary<string, string>();
+        private Dictionary<string, ExcelAlarmInfo> alarmCatalog = new Dictionary<string, ExcelAlarmInfo>();
+        private int alarmsTo = 3;
+        private int technicalAlarmMessagingFrom;
+        private int technicalAlarmMessagingUntil;
 
         public event EventHandler<AlarmEventArgs> AlarmFound;
         public event EventHandler<MonitorStatusEventArgs> StatusChanged;
@@ -43,7 +48,7 @@ namespace MioneAlarmmelder.Core
             lock (sync)
             {
                 settings = value; lastAlarmLine = null;
-                settingsStamp = priorityStamp = translationStamp = DateTime.MinValue;
+                settingsStamp = priorityStamp = translationStamp = catalogStamp = DateTime.MinValue;
                 ReloadReferenceFiles(true);
                 lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
                 CaptureLogState();
@@ -60,10 +65,28 @@ namespace MioneAlarmmelder.Core
                 {
                     string key = i.ToString(); string number;
                     phones.TryGetValue(key, out number);
-                    bool enabled = i == 1 || String.Equals(GetValue(active, key), "true", StringComparison.OrdinalIgnoreCase);
+                    bool enabled = String.Equals(GetValue(active, key), "true", StringComparison.OrdinalIgnoreCase);
                     if (!String.IsNullOrEmpty(number)) result.Add(new KeyValuePair<string, bool>(number, enabled));
                 }
                 return result.ToArray();
+            }
+        }
+
+        public MobileNumberConfig[] GetMobileConfigurations()
+        {
+            lock (sync)
+            {
+                MobileNumberConfig[] result = new MobileNumberConfig[5];
+                for (int i = 1; i <= 5; i++)
+                {
+                    string id = i.ToString(), number; phones.TryGetValue(id, out number);
+                    result[i - 1] = new MobileNumberConfig
+                    {
+                        Slot = i, Number = number ?? "", Active = String.Equals(GetValue(active, id), "true", StringComparison.OrdinalIgnoreCase), AlarmsTo = alarmsTo,
+                        TechnicalAlarmMessagingFrom = technicalAlarmMessagingFrom, TechnicalAlarmMessagingUntil = technicalAlarmMessagingUntil
+                    };
+                }
+                return result;
             }
         }
 
@@ -85,8 +108,8 @@ namespace MioneAlarmmelder.Core
                             if (AlarmMessage.TryParse(line, out alarm))
                             {
                                 alarm.Priority = FindPriority(alarm.Code);
-                                alarm.ClearText = FormatTranslation(alarm);
-                                OnAlarmFound(new AlarmEventArgs(alarm, GetActiveNumbers()));
+                                ApplyAlarmDetails(alarm);
+                                OnAlarmFound(new AlarmEventArgs(alarm));
                             }
                             else OnStatus("Ungültige Alarmzeile: " + line, MonitorState.Error);
                         }
@@ -110,10 +133,15 @@ namespace MioneAlarmmelder.Core
                     phones[id] = PropertiesFile.Get(source, "string.preferences.user.alarmssettings.telephone.number." + id, "");
                     active[id] = PropertiesFile.Get(source, "boolean.preferences.user.alarmssettings.telephone.number.active." + id, i == 1 ? "true" : "false");
                 }
+                int parsedMode; if (!Int32.TryParse(PropertiesFile.Get(source, "int.preferences.user.alarmssettings.AlarmsTo", "3"), out parsedMode) || parsedMode < 0 || parsedMode > 3) parsedMode = 3;
+                alarmsTo = parsedMode;
+                technicalAlarmMessagingFrom = ReadDaySecond(source, "int.preferences.user.alarmssettings.TechnicalAlarmMessagingFrom");
+                technicalAlarmMessagingUntil = ReadDaySecond(source, "int.preferences.user.alarmssettings.TechnicalAlarmMessagingUntil");
                 phoneChanged = true;
             }
             if (force || Changed(settings.PriorityPath, ref priorityStamp)) priorities = PropertiesFile.Read(settings.PriorityPath);
             if (force || Changed(settings.TranslationPath, ref translationStamp)) translations = PropertiesFile.Read(settings.TranslationPath);
+            if (force || Changed(settings.AlarmCatalogPath, ref catalogStamp)) alarmCatalog = ExcelAlarmCatalog.Read(settings.AlarmCatalogPath);
             if (phoneChanged && PhoneSettingsChanged != null) PhoneSettingsChanged(this, EventArgs.Empty);
         }
 
@@ -141,14 +169,24 @@ namespace MioneAlarmmelder.Core
         private string FindPriority(string code)
         {
             string exact = "string.data.rdm.alarmmessage.priority." + code;
-            string value; return priorities.TryGetValue(exact, out value) ? value : "unbekannt";
+            string value; return priorities.TryGetValue(exact, out value) ? value : "System";
         }
 
-        private string FormatTranslation(AlarmMessage alarm)
+        private void ApplyAlarmDetails(AlarmMessage alarm)
         {
-            string text;
-            if (!translations.TryGetValue("message." + alarm.Code, out text) && !translations.TryGetValue("messages." + alarm.Code, out text)) return "Alarmtext nicht gefunden";
-            return text.Replace("{0}", alarm.DateText + " " + alarm.TimeText).Replace("{1}", ExtractNumber(alarm.Location));
+            string text; ExcelAlarmInfo info;
+            bool translated = translations.TryGetValue("message." + alarm.Code, out text) || translations.TryGetValue("messages." + alarm.Code, out text);
+            alarmCatalog.TryGetValue(alarm.Code, out info);
+            if ((!translated || IsPlaceholderText(text)) && info != null && !String.IsNullOrEmpty(info.Description) && !IsPlaceholderText(info.Description)) text = info.Description;
+            if (IsPlaceholderText(text) && info != null && !String.IsNullOrEmpty(info.EnglishDescription)) text = info.EnglishDescription;
+            if (String.IsNullOrEmpty(text)) text = "Alarmtext nicht gefunden";
+            alarm.ClearText = text.Replace("{0}", alarm.DateText + " " + alarm.TimeText).Replace("{1}", ExtractNumber(alarm.Location));
+            alarm.Cause = info == null ? "" : info.Cause; alarm.Solution = info == null ? "" : info.Solution;
+        }
+        private static bool IsPlaceholderText(string text)
+        {
+            if (String.IsNullOrEmpty(text)) return true; string value = text.Trim();
+            return String.Equals(value, "xx.", StringComparison.OrdinalIgnoreCase) || String.Equals(value, "xx", StringComparison.OrdinalIgnoreCase) || value.EndsWith(": xx.", StringComparison.OrdinalIgnoreCase) || value.EndsWith(": xx", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ExtractNumber(string location)
@@ -159,19 +197,11 @@ namespace MioneAlarmmelder.Core
             return b.Length == 0 ? location : b.ToString();
         }
 
-        private string[] GetActiveNumbers()
-        {
-            List<string> result = new List<string>();
-            for (int i = 1; i <= 5; i++)
-            {
-                string id = i.ToString(), number = GetValue(phones, id);
-                bool enabled = i == 1 || String.Equals(GetValue(active, id), "true", StringComparison.OrdinalIgnoreCase);
-                if (enabled && !String.IsNullOrEmpty(number)) result.Add(number);
-            }
-            return result.ToArray();
-        }
-
         private static string GetValue(Dictionary<string, string> source, string key) { string value; return source.TryGetValue(key, out value) ? value : ""; }
+        private static int ReadDaySecond(Dictionary<string, string> source, string key)
+        {
+            int value; return Int32.TryParse(PropertiesFile.Get(source, key, "0"), out value) && value >= 0 && value <= 86400 ? value : 0;
+        }
         private static string ReadLastNonEmptyLine(string path)
         {
             string last = null;
@@ -193,6 +223,15 @@ namespace MioneAlarmmelder.Core
     }
 
     public enum MonitorState { Disabled, Waiting, Ok, Sending, Error }
-    public sealed class AlarmEventArgs : EventArgs { public AlarmMessage Alarm { get; private set; } public string[] PhoneNumbers { get; private set; } public AlarmEventArgs(AlarmMessage a, string[] p) { Alarm = a; PhoneNumbers = p; } }
+    public sealed class AlarmEventArgs : EventArgs { public AlarmMessage Alarm { get; private set; } public AlarmEventArgs(AlarmMessage alarm) { Alarm = alarm; } }
     public sealed class MonitorStatusEventArgs : EventArgs { public string Text { get; private set; } public MonitorState State { get; private set; } public MonitorStatusEventArgs(string t, MonitorState s) { Text = t; State = s; } }
+    public sealed class MobileNumberConfig
+    {
+        public int Slot { get; set; } public string Number { get; set; } public bool Active { get; set; } public int AlarmsTo { get; set; }
+        public int TechnicalAlarmMessagingFrom { get; set; } public int TechnicalAlarmMessagingUntil { get; set; }
+        public string AlarmModeText { get { return AlarmsTo == 0 ? "Anrufen" : AlarmsTo == 1 ? "Nachricht" : AlarmsTo == 2 ? "Anruf/Nachricht" : "Keine Alarmierung"; } }
+        public string TechnicalAlarmMessagingFromText { get { return FormatDaySecond(TechnicalAlarmMessagingFrom); } }
+        public string TechnicalAlarmMessagingUntilText { get { return FormatDaySecond(TechnicalAlarmMessagingUntil); } }
+        private static string FormatDaySecond(int value) { return (value / 3600).ToString("00") + ":" + ((value % 3600) / 60).ToString("00"); }
+    }
 }

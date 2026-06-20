@@ -10,7 +10,10 @@ namespace MioneAlarmmelder
     public sealed class AlarmApplicationContext : ApplicationContext
     {
         private AppSettings settings; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher;
-        private System.Threading.Timer heartbeatTimer, updateTimer; private int heartbeatPending;
+        private MqttProgressSubscriber mqttProgressSubscriber;
+        private System.Threading.Timer heartbeatTimer, updateTimer; private int heartbeatPending, updateCheckPending;
+        private string notifiedUpdateTag = "";
+        private bool heartbeatValue, mqttModemActive;
 
         public AlarmApplicationContext()
         {
@@ -25,18 +28,26 @@ namespace MioneAlarmmelder
             main.SettingsSaved += delegate { Restart(); };
             main.UpdateCheckRequested += delegate { CheckForUpdates(true); };
             main.TestAlarmRequested += delegate { SendTestAlarm(); };
+            main.UrgentTestAlarmRequested += delegate { SendUrgentTestAlarm(); };
             main.Show(); Start(); ScheduleUpdateCheck();
         }
 
         private void Start()
         {
             if (settings.MissingFiles().Length > 0) { main.SetStatus("Dateipfade unvollständig", MonitorState.Error); return; }
-            dispatcher = new AlarmDispatcher(settings); dispatcher.Completed += DispatchCompleted; dispatcher.HeartbeatCompleted += HeartbeatCompleted;
+            dispatcher = new AlarmDispatcher(settings); dispatcher.Completed += DispatchCompleted; dispatcher.HeartbeatCompleted += HeartbeatCompleted; dispatcher.MobileConfigCompleted += MobileConfigCompleted; dispatcher.ProgressReceived += AlarmProgressReceived;
+            if (settings.MqttEnabled)
+            {
+                mqttProgressSubscriber = new MqttProgressSubscriber(settings);
+                mqttProgressSubscriber.ProgressReceived += AlarmProgressReceived;
+                mqttProgressSubscriber.Start();
+            }
             monitor = new FileMonitorService(settings); monitor.StatusChanged += MonitorStatusChanged; monitor.AlarmFound += AlarmFound; monitor.PhoneSettingsChanged += PhonesChanged;
             try
             {
-                monitor.Start(); main.SetPhones(monitor.GetPhones()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
-                heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, Math.Max(10, settings.HeartbeatSeconds) * 1000);
+                monitor.Start(); main.SetPhones(monitor.GetMobileConfigurations()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
+                main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.MqttEnabled ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.MqttEnabled ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
+                heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
             }
             catch (Exception ex) { ErrorLogger.Log("Dateiüberwachung", ex); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
@@ -46,24 +57,34 @@ namespace MioneAlarmmelder
         {
             if (heartbeatTimer != null) { heartbeatTimer.Dispose(); heartbeatTimer = null; }
             if (updateTimer != null) { updateTimer.Dispose(); updateTimer = null; }
+            if (mqttProgressSubscriber != null) { mqttProgressSubscriber.Dispose(); mqttProgressSubscriber = null; }
             Interlocked.Exchange(ref heartbeatPending, 0);
+            heartbeatValue = false;
+            mqttModemActive = false;
+            Interlocked.Exchange(ref updateCheckPending, 0);
             if (monitor != null) { monitor.Dispose(); monitor = null; } dispatcher = null;
         }
+        private void AlarmProgressReceived(object sender, AlarmProgressEvent e)
+        {
+            if (String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase)) mqttModemActive = true;
+            main.SetModemStatus(e.Source, "aktiv", MonitorState.Ok); main.ShowAlarmProgress(e);
+        }
         private void MonitorStatusChanged(object sender, MonitorStatusEventArgs e) { if (e.State == MonitorState.Error) { ErrorLogger.Log("Dateiüberwachung", e.Text); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); } else main.SetStatus(e.Text, e.State); }
-        private void PhonesChanged(object sender, EventArgs e) { if (monitor != null) main.SetPhones(monitor.GetPhones()); }
+        private void PhonesChanged(object sender, EventArgs e)
+        {
+            if (monitor == null) return; main.SetPhones(monitor.GetMobileConfigurations());
+            if (dispatcher != null) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
+        }
         private void AlarmFound(object sender, AlarmEventArgs e)
         {
             main.AddAlarm(e.Alarm); main.SetStatus("Alarm " + e.Alarm.Code + " wird versendet", MonitorState.Sending);
             if (settings.MqttEnabled) main.SetMqttStatus("sendet Alarm " + e.Alarm.Code, MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Alarm " + e.Alarm.Code, MonitorState.Sending);
-            if (dispatcher != null) dispatcher.Dispatch(e.Alarm, e.PhoneNumbers);
+            if (dispatcher != null) dispatcher.Dispatch(e.Alarm);
         }
         private void SendTestAlarm()
         {
             if (monitor == null || dispatcher == null) { ErrorLogger.Log("Testfehler", "Überwachung oder Versand ist nicht gestartet."); main.SetStatus("Testfehler nicht möglich", MonitorState.Error); return; }
-            System.Collections.Generic.KeyValuePair<string, bool>[] phones = monitor.GetPhones();
-            System.Collections.Generic.List<string> activeNumbers = new System.Collections.Generic.List<string>();
-            for (int i = 0; i < phones.Length; i++) if (phones[i].Value) activeNumbers.Add(phones[i].Key);
             AlarmMessage alarm = new AlarmMessage
             {
                 DateText = DateTime.Now.ToString("dd.MM.yy"), TimeText = DateTime.Now.ToString("HH:mm:ss"), Code = "TEST",
@@ -72,7 +93,22 @@ namespace MioneAlarmmelder
             main.AddAlarm(alarm); main.SetStatus("Testfehler wird versendet", MonitorState.Sending);
             if (settings.MqttEnabled) main.SetMqttStatus("sendet Testfehler", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Testfehler", MonitorState.Sending);
-            dispatcher.Dispatch(alarm, activeNumbers.ToArray());
+            dispatcher.Dispatch(alarm);
+        }
+        private void SendUrgentTestAlarm()
+        {
+            if (dispatcher == null) { ErrorLogger.Log("Testalarm", "Der Versand ist nicht gestartet."); main.SetStatus("Testalarm nicht möglich", MonitorState.Error); return; }
+            DateTime now = DateTime.Now;
+            AlarmMessage alarm = new AlarmMessage
+            {
+                DateText = now.ToString("dd.MM.yy"), TimeText = now.ToString("HH:mm:ss"), Code = "TEST",
+                Location = "Test", CowNumber = "0", Priority = "urgent",
+                ClearText = "Testalarm vom " + now.ToString("dd.MM.yyyy") + " um " + now.ToString("HH:mm:ss") + " Uhr zur Prüfung der Alarmierung."
+            };
+            main.AddAlarm(alarm); main.SetStatus("Testalarm (urgent) wird versendet", MonitorState.Sending);
+            if (settings.MqttEnabled) main.SetMqttStatus("sendet Testalarm (urgent)", MonitorState.Sending);
+            if (settings.TcpEnabled) main.SetTcpStatus("sendet Testalarm (urgent)", MonitorState.Sending);
+            dispatcher.Dispatch(alarm);
         }
         private void DispatchCompleted(object sender, DispatchResultEventArgs e)
         {
@@ -89,7 +125,8 @@ namespace MioneAlarmmelder
             if (Interlocked.Exchange(ref heartbeatPending, 1) != 0) return;
             if (settings.MqttEnabled) main.SetMqttStatus("Heartbeat wird gesendet", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("Heartbeat wird gesendet", MonitorState.Sending);
-            dispatcher.DispatchHeartbeat();
+            heartbeatValue = !heartbeatValue; dispatcher.DispatchHeartbeat(heartbeatValue);
+            if (monitor != null && (settings.MqttEnabled || settings.TcpEnabled)) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
         }
         private void HeartbeatCompleted(object sender, DispatchResultEventArgs e)
         {
@@ -98,12 +135,22 @@ namespace MioneAlarmmelder
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
+            if (e.TcpEnabled) main.SetModemStatus("Socket", e.TcpSuccessful ? "aktiv" : "nicht erreichbar", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
+            else if (e.MqttEnabled && !e.MqttSuccessful) main.SetModemStatus("MQTT", "Verbindung fehlerhaft", MonitorState.Error);
+            else if (e.MqttEnabled) main.SetModemStatus("MQTT", mqttModemActive ? "aktiv" : "warte auf Rückmeldung", mqttModemActive ? MonitorState.Ok : MonitorState.Waiting);
+            else main.SetModemStatus("", "deaktiviert", MonitorState.Disabled);
             if (e.Error.Length > 0) { ErrorLogger.Log("Heartbeat", e.Error); main.SetStatus("Heartbeat-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
+        }
+        private void MobileConfigCompleted(object sender, DispatchResultEventArgs e)
+        {
+            if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
+            if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
+            if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
         private void ScheduleUpdateCheck()
         {
             if (!settings.UpdateEnabled || String.IsNullOrEmpty(settings.UpdateRepository)) return;
-            updateTimer = new System.Threading.Timer(delegate { CheckForUpdates(false); }, null, 8000, System.Threading.Timeout.Infinite);
+            updateTimer = new System.Threading.Timer(delegate { CheckForUpdates(false); }, null, 8000, Math.Max(5, settings.UpdateCheckMinutes) * 60000);
         }
         private void CheckForUpdates(bool manual)
         {
@@ -111,9 +158,15 @@ namespace MioneAlarmmelder
             {
                 main.SetUpdateStatus("Bitte zuerst das GitHub-Repository eintragen und speichern."); return;
             }
+            if (Interlocked.Exchange(ref updateCheckPending, 1) != 0)
+            {
+                if (manual) main.SetUpdateStatus("Eine Updateprüfung läuft bereits."); return;
+            }
             main.SetUpdateStatus("GitHub wird geprüft ...");
             GitHubUpdateService.CheckAsync(settings, delegate(UpdateCheckResult result)
             {
+                Interlocked.Exchange(ref updateCheckPending, 0);
+                if (main.IsDisposed || !main.IsHandleCreated) return;
                 main.BeginInvoke((MethodInvoker)delegate
                 {
                     if (!String.IsNullOrEmpty(result.Error))
@@ -130,7 +183,11 @@ namespace MioneAlarmmelder
                         return;
                     }
                     main.SetUpdateStatus("Neue Version verfügbar: " + result.TagName);
-                    if (MessageBox.Show("Version " + result.TagName + " ist verfügbar. Jetzt installieren und neu starten?", "Update verfügbar", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    if (!String.Equals(notifiedUpdateTag, result.TagName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        notifiedUpdateTag = result.TagName; main.ShowUpdateNotification(result.TagName);
+                    }
+                    if (manual && MessageBox.Show("Version " + result.TagName + " ist verfügbar. Jetzt installieren und neu starten?", "Update verfügbar", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                         DownloadUpdate(result);
                 });
             });

@@ -11,6 +11,8 @@ namespace MioneAlarmmelder.Core
         public string CowNumber { get; set; }
         public string Priority { get; set; }
         public string ClearText { get; set; }
+        public string Cause { get; set; }
+        public string Solution { get; set; }
 
         public static bool TryParse(string line, out AlarmMessage alarm)
         {
@@ -23,7 +25,7 @@ namespace MioneAlarmmelder.Core
             alarm = new AlarmMessage
             {
                 DateText = values[0], TimeText = values[1], Code = values[2],
-                Location = values[3], CowNumber = values[4], Priority = "unbekannt", ClearText = "Alarmtext nicht gefunden"
+                Location = values[3], CowNumber = values[4], Priority = "System", ClearText = "Alarmtext nicht gefunden", Cause = "", Solution = ""
             };
             return true;
         }

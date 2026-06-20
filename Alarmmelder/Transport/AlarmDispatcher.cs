@@ -10,47 +10,44 @@ namespace MioneAlarmmelder.Transport
         private AppSettings settings;
         public event EventHandler<DispatchResultEventArgs> Completed;
         public event EventHandler<DispatchResultEventArgs> HeartbeatCompleted;
+        public event EventHandler<DispatchResultEventArgs> MobileConfigCompleted;
+        public event EventHandler<AlarmProgressEvent> ProgressReceived;
 
         public AlarmDispatcher(AppSettings settings) { this.settings = settings; }
         public void ApplySettings(AppSettings value) { settings = value; }
 
-        public void Dispatch(AlarmMessage alarm, string[] numbers)
+        public void Dispatch(AlarmMessage alarm)
         {
-            AppSettings snapshot = settings; string[] recipients = numbers;
+            AppSettings snapshot = settings;
             ThreadPool.QueueUserWorkItem(delegate
             {
                 int sent = 0; StringBuilder errors = new StringBuilder();
                 StringBuilder mqttErrors = new StringBuilder(); StringBuilder tcpErrors = new StringBuilder();
-                bool mqttSuccessful = snapshot.MqttEnabled && recipients.Length > 0;
-                bool tcpSuccessful = snapshot.TcpEnabled && recipients.Length > 0;
-                if (recipients.Length == 0) errors.Append("Keine aktive Rufnummer vorhanden. ");
+                bool mqttSuccessful = false, tcpSuccessful = false;
                 if (!snapshot.MqttEnabled && !snapshot.TcpEnabled) errors.Append("Kein Versandweg aktiviert. ");
-                for (int i = 0; i < recipients.Length; i++)
+                string json = BuildJson(alarm, snapshot.ModemImei);
+                if (snapshot.MqttEnabled)
                 {
-                    string json = BuildJson(snapshot.CustomerId, recipients[i], alarm);
-                    if (snapshot.MqttEnabled)
-                    {
-                        try
-                        {
-                            string topic = (snapshot.MqttTopic ?? "").Replace("{kunde}", snapshot.CustomerId ?? "");
-                            MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, topic, json); sent++;
-                        }
-                        catch (Exception ex) { mqttSuccessful = false; mqttErrors.Append(ex.Message + " "); errors.Append("MQTT: " + ex.Message + " "); }
-                    }
-                    if (snapshot.TcpEnabled)
-                    {
-                        try { TcpPublisher.Publish(snapshot.TcpHost, snapshot.TcpPort, json); sent++; }
-                        catch (Exception ex) { tcpSuccessful = false; tcpErrors.Append(ex.Message + " "); errors.Append("TCP: " + ex.Message + " "); }
-                    }
+                    try { MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Alarm"), json); mqttSuccessful = true; sent++; }
+                    catch (Exception ex) { mqttErrors.Append(ex.Message); errors.Append("MQTT: " + ex.Message + " "); }
                 }
-                if (snapshot.MqttEnabled && recipients.Length == 0) mqttErrors.Append("Keine aktive Rufnummer vorhanden.");
-                if (snapshot.TcpEnabled && recipients.Length == 0) tcpErrors.Append("Keine aktive Rufnummer vorhanden.");
+                if (snapshot.TcpEnabled)
+                {
+                    try
+                    {
+                        if (snapshot.ShowAlarmProgress) TcpPublisher.PublishWithProgress(snapshot.TcpHost, snapshot.TcpPort, json,
+                            delegate(AlarmProgressEvent value) { if (value.ModemImei == snapshot.ModemImei) OnProgressReceived(value); }, 30000);
+                        else TcpPublisher.Publish(snapshot.TcpHost, snapshot.TcpPort, json);
+                        tcpSuccessful = true; sent++;
+                    }
+                    catch (Exception ex) { tcpErrors.Append(ex.Message); errors.Append("TCP: " + ex.Message + " "); }
+                }
                 OnCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.MqttEnabled, mqttSuccessful,
                     mqttErrors.ToString().Trim(), snapshot.TcpEnabled, tcpSuccessful, tcpErrors.ToString().Trim()));
             });
         }
 
-        public void DispatchHeartbeat()
+        public void DispatchHeartbeat(bool value)
         {
             AppSettings snapshot = settings;
             ThreadPool.QueueUserWorkItem(delegate
@@ -58,13 +55,12 @@ namespace MioneAlarmmelder.Transport
                 int sent = 0; StringBuilder errors = new StringBuilder();
                 bool mqttSuccessful = false, tcpSuccessful = false;
                 string mqttError = "", tcpError = "";
-                string json = BuildHeartbeatJson(snapshot.CustomerId);
+                string json = BuildHeartbeatJson(value, snapshot.ModemImei);
                 if (snapshot.MqttEnabled)
                 {
                     try
                     {
-                        string topic = BuildHeartbeatTopic(snapshot.MqttTopic, snapshot.CustomerId);
-                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, topic, json);
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Heartbeat"), json);
                         mqttSuccessful = true; sent++;
                     }
                     catch (Exception ex) { mqttError = ex.Message; errors.Append("MQTT-Heartbeat: " + ex.Message + " "); }
@@ -79,28 +75,71 @@ namespace MioneAlarmmelder.Transport
             });
         }
 
-        private static string BuildJson(string customer, string phone, AlarmMessage a)
+        public void PublishMobileConfiguration(MobileNumberConfig[] mobiles)
+        {
+            AppSettings snapshot = settings; MobileNumberConfig[] values = mobiles;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                int sent = 0; StringBuilder errors = new StringBuilder(); bool mqttSuccessful = false, tcpSuccessful = false; string mqttError = "", tcpError = "";
+                string json = BuildMobileJson(values, snapshot.ModemImei);
+                if (snapshot.MqttEnabled)
+                {
+                    try
+                    {
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Config/Mobile/modemImei"), snapshot.ModemImei);
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Config/Mobile"), json);
+                        mqttSuccessful = true; sent += 2;
+                    }
+                    catch (Exception ex) { mqttError = ex.Message; errors.Append("MQTT-Mobilkonfiguration: " + ex.Message + " "); }
+                }
+                if (snapshot.TcpEnabled)
+                {
+                    try { TcpPublisher.Publish(snapshot.TcpHost, snapshot.TcpPort, json); tcpSuccessful = true; sent++; }
+                    catch (Exception ex) { tcpError = ex.Message; errors.Append("TCP-Mobilkonfiguration: " + ex.Message + " "); }
+                }
+                OnMobileConfigCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.MqttEnabled, mqttSuccessful, mqttError, snapshot.TcpEnabled, tcpSuccessful, tcpError));
+            });
+        }
+
+        private static string BuildJson(AlarmMessage a, string modemImei)
         {
             StringBuilder b = new StringBuilder(); b.Append("{");
-            Add(b, "kunde", customer); b.Append(','); Add(b, "rufnummer", phone); b.Append(',');
+            Add(b, "modemImei", modemImei); b.Append(',');
             Add(b, "datum", a.DateText); b.Append(','); Add(b, "uhrzeit", a.TimeText); b.Append(',');
             Add(b, "alarmCode", a.Code); b.Append(','); Add(b, "ort", a.Location); b.Append(',');
-            Add(b, "kuhnummer", a.CowNumber); b.Append(','); Add(b, "prioritaet", a.Priority); b.Append(',');
-            Add(b, "alarmText", a.ClearText); b.Append("}"); return b.ToString();
+            Add(b, "kuh", a.CowNumber); b.Append(','); Add(b, "prioritaet", a.Priority); b.Append(',');
+            Add(b, "alarmText", WithoutGermanUmlauts(a.ClearText)); b.Append("}"); return b.ToString();
         }
-        private static string BuildHeartbeatJson(string customer)
+        private static string BuildHeartbeatJson(bool value, string modemImei)
         {
-            StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "type", "heartbeat"); b.Append(',');
-            Add(b, "kunde", customer); b.Append(','); Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "type", "heartbeat"); b.Append(','); Add(b, "modemImei", modemImei); b.Append(',').Append("\"value\":").Append(value ? "true" : "false").Append(','); Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
             b.Append("}"); return b.ToString();
         }
-        private static string BuildHeartbeatTopic(string alarmTopic, string customer)
+        private static string BuildMobileJson(MobileNumberConfig[] mobiles, string modemImei)
         {
-            string topic = (alarmTopic ?? "").Replace("{kunde}", customer ?? "").TrimEnd('/');
-            if (topic.EndsWith("/alarm", StringComparison.OrdinalIgnoreCase)) return topic.Substring(0, topic.Length - 6) + "/heartbeat";
-            return topic + "/heartbeat";
+            StringBuilder b = new StringBuilder(); b.Append("{"); Add(b, "modemImei", modemImei); b.Append(",\"mobile\":[");
+            for (int i = 0; i < mobiles.Length; i++)
+            {
+                if (i > 0) b.Append(','); b.Append('{'); b.Append("\"slot\":").Append(mobiles[i].Slot).Append(',');
+                Add(b, "nummer", mobiles[i].Number); b.Append(',').Append("\"aktiv\":").Append(mobiles[i].Active ? "true" : "false").Append(',');
+                b.Append("\"alarmsTo\":").Append(mobiles[i].AlarmsTo).Append(','); Add(b, "alarmierung", mobiles[i].AlarmModeText); b.Append(',');
+                b.Append("\"technicalAlarmMessagingFrom\":").Append(mobiles[i].TechnicalAlarmMessagingFrom).Append(','); Add(b, "technicalAlarmMessagingFromText", mobiles[i].TechnicalAlarmMessagingFromText); b.Append(',');
+                b.Append("\"technicalAlarmMessagingUntil\":").Append(mobiles[i].TechnicalAlarmMessagingUntil).Append(','); Add(b, "technicalAlarmMessagingUntilText", mobiles[i].TechnicalAlarmMessagingUntilText); b.Append('}');
+            }
+            b.Append("]}"); return b.ToString();
+        }
+        private static string Topic(string user, string subTopic)
+        {
+            string top = (user ?? "").Trim().Trim('/'); if (top.Length == 0) throw new InvalidOperationException("MQTT-Benutzername/Top-Topic fehlt.");
+            return top + "/" + subTopic.TrimStart('/');
         }
         private static void Add(StringBuilder b, string key, string value) { b.Append('"').Append(Escape(key)).Append("\":\"").Append(Escape(value)).Append('"'); }
+        private static string WithoutGermanUmlauts(string value)
+        {
+            if (value == null) return "";
+            return value.Replace("Ä", "Ae").Replace("Ö", "Oe").Replace("Ü", "Ue")
+                .Replace("ä", "ae").Replace("ö", "oe").Replace("ü", "ue").Replace("ß", "ss");
+        }
         private static string Escape(string value)
         {
             if (value == null) return ""; StringBuilder b = new StringBuilder();
@@ -114,6 +153,8 @@ namespace MioneAlarmmelder.Transport
         }
         private void OnCompleted(DispatchResultEventArgs e) { if (Completed != null) Completed(this, e); }
         private void OnHeartbeatCompleted(DispatchResultEventArgs e) { if (HeartbeatCompleted != null) HeartbeatCompleted(this, e); }
+        private void OnMobileConfigCompleted(DispatchResultEventArgs e) { if (MobileConfigCompleted != null) MobileConfigCompleted(this, e); }
+        private void OnProgressReceived(AlarmProgressEvent e) { if (ProgressReceived != null) ProgressReceived(this, e); }
     }
 
     public sealed class DispatchResultEventArgs : EventArgs

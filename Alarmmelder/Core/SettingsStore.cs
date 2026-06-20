@@ -34,7 +34,7 @@ namespace MioneAlarmmelder.Core
                 s.StartWithWindows = GetBool(d, "StartWithWindows", false);
                 s.UpdateEnabled = GetBool(d, "UpdateEnabled", true);
                 s.UpdateRepository = Get(d, "UpdateRepository", "mrcrash112/Mione-Alarmmelder");
-                s.UpdateAssetName = Get(d, "UpdateAssetName", "MioneAlarmmelder.exe");
+                s.UpdateAssetName = Get(d, "UpdateAssetName", "MioneAlarmmelder-*.zip");
                 s.UpdateCheckMinutes = Math.Max(5, GetInt(d, "UpdateCheckMinutes", 60));
                 s.AlarmHistoryLimit = Limit(GetInt(d, "AlarmHistoryLimit", 2500)); s.ErrorHistoryLimit = Limit(GetInt(d, "ErrorHistoryLimit", 2500));
                 MigrateOldDefaults(s);
@@ -84,6 +84,7 @@ namespace MioneAlarmmelder.Core
             if (String.Equals(s.PriorityPath, @"D:\DairyPln\RDM\configuration\data\rdm\useralarmpriorities", StringComparison.OrdinalIgnoreCase)) s.PriorityPath = @"D:\DairyPln\RDM\configuration\data\rdm\useralarmpriorities.properties";
             string oldTranslation = Path.Combine(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets"), "translations_de.properties");
             if (String.Equals(s.TranslationPath, oldTranslation, StringComparison.OrdinalIgnoreCase)) s.TranslationPath = @"D:\Release\Assets\translations_de.properties";
+            if (String.Equals(s.UpdateAssetName, "MioneAlarmmelder.exe", StringComparison.OrdinalIgnoreCase)) s.UpdateAssetName = "MioneAlarmmelder-*.zip";
         }
     }
 }

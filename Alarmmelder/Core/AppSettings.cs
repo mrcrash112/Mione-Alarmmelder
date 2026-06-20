@@ -40,7 +40,7 @@ namespace MioneAlarmmelder.Core
                 AlarmCatalogPath = @"D:\Release\Assets\Mione_AlarmCodes_UK_DE.xlsx",
                 MqttHost = "", MqttPort = 1883, ModemImei = "",
                 TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
-                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder.exe", UpdateCheckMinutes = 60,
+                UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateCheckMinutes = 60,
                 AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500
             };
         }

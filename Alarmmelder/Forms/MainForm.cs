@@ -302,7 +302,7 @@ namespace MioneAlarmmelder.Forms
             if (!Int32.TryParse(updateIntervalBox.Text, out updateMinutes) || updateMinutes < 5) { MessageBox.Show("Das Update-Prüfintervall muss mindestens 5 Minuten betragen.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             settings.UpdateCheckMinutes = updateMinutes;
             if (settings.UpdateEnabled && settings.UpdateRepository.Length > 0 && settings.UpdateRepository.IndexOf('/') < 1) { MessageBox.Show("Das GitHub-Repository muss im Format Besitzer/Repository angegeben werden.", "Ungültige Updatequelle", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
-            if (settings.UpdateAssetName.Length == 0) settings.UpdateAssetName = "MioneAlarmmelder.exe"; return true;
+            if (settings.UpdateAssetName.Length == 0) settings.UpdateAssetName = "MioneAlarmmelder-*.zip"; return true;
         }
 
         private void SaveClick(object sender, EventArgs e)

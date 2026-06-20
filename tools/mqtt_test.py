@@ -103,6 +103,12 @@ class MqttClient:
         header = 0x31 if retain else 0x30
         send_packet(self.sock, header, enc_string(topic) + payload.encode("utf-8"))
 
+    def ping(self):
+        send_packet(self.sock, 0xC0)
+        header, body = read_packet(self.sock)
+        if header >> 4 != 13:
+            raise RuntimeError("PINGRESP erwartet, Paket %s empfangen" % (header >> 4))
+
     def subscribe(self, topic):
         packet_id = self.packet_id
         self.packet_id += 1

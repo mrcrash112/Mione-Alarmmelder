@@ -118,6 +118,20 @@ python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer listen Melkr
 python3 tools/mqtt_test.py --host 192.168.1.10 --user mqtt_benutzer alarm --modem-imei 123456789012345
 ```
 
+Für die grafische Überwachung auf macOS gibt es zusätzlich eine lokale
+Browser-GUI:
+
+```bash
+python3 tools/mqtt_gui.py
+```
+
+Das Programm öffnet `http://127.0.0.1:8765`. Die GUI abonniert nach dem Verbinden automatisch
+`<Benutzername>/Melkroboter/#` und `<Benutzername>/Alarmfunktionen/#`, zeigt die
+Boxen parallel als Tabelle, listet empfangene Topics und kann die im
+Funktionskatalog gefundenen Melkroboter-Befehle nach
+`<Benutzername>/Melkroboter/Command` publishen. Server, Port und Benutzer werden
+lokal gespeichert; das Passwort wird nur für die aktuelle Sitzung verwendet.
+
 ## GitHub-Updates
 
 Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen und den Kanal wählen. **Stable** prüft das neueste öffentliche GitHub-Release. **Beta** prüft den Release-Tag `beta` und liest die Version aus dem ZIP-Asset, zum Beispiel `MioneAlarmmelder-1.1.9.15_Beta.zip`. Beta-Builds werden in der Oberfläche mit `_Beta` angezeigt. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.

@@ -41,7 +41,7 @@ namespace MioneAlarmmelder.Transport
                 activeClient = client; client.ReceiveTimeout = 5000; client.SendTimeout = 5000;
                 SendConnect(stream); byte header; byte[] body; ReadPacket(stream, out header, out body);
                 if ((header >> 4) != 2 || body.Length < 2 || body[1] != 0) throw new IOException("MQTT-Anmeldung für Alarmstatus abgelehnt.");
-                SendSubscribe(stream, new string[] { Topic("MiOne/AlarmStatus"), Topic("MiOne/ModemStatus") }); ReadPacket(stream, out header, out body);
+                SendSubscribe(stream, new string[] { Topic("Alarmfunktionen/AlarmStatus"), Topic("Alarmfunktionen/ModemStatus") }); ReadPacket(stream, out header, out body);
                 if ((header >> 4) != 9) throw new IOException("MQTT-Alarmstatus konnte nicht abonniert werden.");
                 client.ReceiveTimeout = 60000;
                 while (!stopping)

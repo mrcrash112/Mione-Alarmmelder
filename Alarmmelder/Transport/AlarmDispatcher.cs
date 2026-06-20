@@ -28,7 +28,7 @@ namespace MioneAlarmmelder.Transport
                 string json = BuildJson(alarm, snapshot.ModemImei);
                 if (snapshot.MqttEnabled)
                 {
-                    try { MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Alarm"), json); mqttSuccessful = true; sent++; }
+                    try { MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "Alarmfunktionen/Alarm"), json); mqttSuccessful = true; sent++; }
                     catch (Exception ex) { mqttErrors.Append(ex.Message); errors.Append("MQTT: " + ex.Message + " "); }
                 }
                 if (snapshot.TcpEnabled)
@@ -60,7 +60,7 @@ namespace MioneAlarmmelder.Transport
                 {
                     try
                     {
-                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Heartbeat"), json);
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "Alarmfunktionen/Heartbeat"), json);
                         mqttSuccessful = true; sent++;
                     }
                     catch (Exception ex) { mqttError = ex.Message; errors.Append("MQTT-Heartbeat: " + ex.Message + " "); }
@@ -87,14 +87,14 @@ namespace MioneAlarmmelder.Transport
             ThreadPool.QueueUserWorkItem(delegate
             {
                 int sent = 0; StringBuilder errors = new StringBuilder(); bool mqttSuccessful = false, tcpSuccessful = false; string mqttError = "", tcpError = "";
-                string modemStatusTopic = snapshot.MqttEnabled && !String.IsNullOrEmpty(snapshot.MqttUser) ? Topic(snapshot.MqttUser, "MiOne/ModemStatus") : "";
+                string modemStatusTopic = snapshot.MqttEnabled && !String.IsNullOrEmpty(snapshot.MqttUser) ? Topic(snapshot.MqttUser, "Alarmfunktionen/ModemStatus") : "";
                 string json = BuildMobileJson(values, snapshot.ModemImei, modemStatusTopic);
                 if (snapshot.MqttEnabled)
                 {
                     try
                     {
-                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Config/Mobile/modemImei"), snapshot.ModemImei);
-                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "MiOne/Config/Mobile"), json);
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "Alarmfunktionen/Config/Mobile/modemImei"), snapshot.ModemImei);
+                        MqttPublisher.Publish(snapshot.MqttHost, snapshot.MqttPort, snapshot.MqttUser, snapshot.MqttPassword, Topic(snapshot.MqttUser, "Alarmfunktionen/Config/Mobile"), json);
                         mqttSuccessful = true; sent += 2;
                     }
                     catch (Exception ex) { mqttError = ex.Message; errors.Append("MQTT-Mobilkonfiguration: " + ex.Message + " "); }

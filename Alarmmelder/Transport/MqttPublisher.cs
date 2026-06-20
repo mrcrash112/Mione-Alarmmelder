@@ -11,8 +11,8 @@ namespace MioneAlarmmelder.Transport
     {
         public static void Publish(string host, int port, string user, string password, string topic, string payload)
         {
-            bool retain = topic.EndsWith("/MiOne/Config/Mobile", StringComparison.Ordinal) ||
-                          topic.EndsWith("/MiOne/Config/Mobile/modemImei", StringComparison.Ordinal);
+            bool retain = topic.EndsWith("/Alarmfunktionen/Config/Mobile", StringComparison.Ordinal) ||
+                          topic.EndsWith("/Alarmfunktionen/Config/Mobile/modemImei", StringComparison.Ordinal);
             Publish(host, port, user, password, topic, payload, retain);
         }
 

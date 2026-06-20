@@ -381,7 +381,7 @@ namespace MioneAlarmmelder.Forms
             if (settings.MqttEnabled)
             {
                 SetMqttStatus("wird geprüft", MonitorState.Sending);
-                try { MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, settings.MqttUser.Trim('/') + "/MiOne/Alarme", "{\"test\":true}"); SetMqttStatus("verbunden", MonitorState.Ok); }
+                try { MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, settings.MqttUser.Trim('/') + "/Alarmfunktionen/Alarme", "{\"test\":true}"); SetMqttStatus("verbunden", MonitorState.Ok); }
                 catch (Exception ex) { ErrorLogger.Log("MQTT-Verbindungstest", ex); SetMqttStatus("Fehler", MonitorState.Error); errors += "MQTT: " + ex.Message + "\r\n"; }
             }
             else SetMqttStatus("deaktiviert", MonitorState.Disabled);

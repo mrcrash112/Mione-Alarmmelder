@@ -20,6 +20,7 @@ namespace MioneAlarmmelder.Forms
         private ToolTip alarmToolTip; private long toolTipAlarmId = -1;
         private AlarmProgressForm alarmProgressForm;
         private ContextMenuStrip errorListMenu; private ToolStripMenuItem errorCopyMessageItem;
+        private ContextMenuStrip robotCommandMenu; private ToolStripMenuItem robotCommandCopyItem;
         private List<ErrorLogEntry> errorEntries = new List<ErrorLogEntry>(); private int errorSortColumn; private bool errorSortAscending = false;
         public event EventHandler SettingsSaved;
         public event EventHandler UpdateCheckRequested;
@@ -42,6 +43,11 @@ namespace MioneAlarmmelder.Forms
             dpProcessCheckButton.Click += delegate { RenderDpProcessFiles(); };
             robotCommandClearButton.Click += delegate { robotCommandList.Items.Clear(); robotCommandPayloadBox.Clear(); };
             robotCommandList.SelectedIndexChanged += RobotCommandSelectionChanged;
+            robotCommandMenu = new ContextMenuStrip(); robotCommandCopyItem = new ToolStripMenuItem("Funktionslog kopieren");
+            robotCommandCopyItem.Click += delegate { CopySelectedRobotCommands(); };
+            robotCommandMenu.Opening += delegate { robotCommandCopyItem.Enabled = robotCommandList.SelectedItems.Count > 0; };
+            robotCommandMenu.Items.Add(robotCommandCopyItem); robotCommandList.ContextMenuStrip = robotCommandMenu; robotCommandPayloadBox.ContextMenuStrip = robotCommandMenu;
+            robotCommandList.KeyDown += RobotCommandListKeyDown; robotCommandPayloadBox.KeyDown += RobotCommandPayloadKeyDown;
             errorRefreshButton.Click += delegate { LoadErrorLog(); };
             errorClearButton.Click += ErrorClearClick;
             ErrorLogger.ErrorLogged += ErrorWasLogged;
@@ -435,6 +441,7 @@ namespace MioneAlarmmelder.Forms
             item.SubItems.Add(value.Message);
             item.Tag = "Empfangen von " + value.ReceivedTopic + Environment.NewLine + value.Payload + Environment.NewLine + Environment.NewLine +
                 "Result nach " + value.ResultTopic + " (" + (value.ResultPublished ? "gesendet" : "nicht gesendet") + ")" + Environment.NewLine + value.ResultPayload;
+            item.ToolTipText = String.Equals(value.State, "pendingNativeBridge", StringComparison.OrdinalIgnoreCase) ? "Befehl ist angekommen und validiert. Die native DPProcessControl-Uebergabe ist noch nicht aktiv." : value.Message;
             item.BackColor = value.ResultPublished && String.Equals(value.State, "pendingNativeBridge", StringComparison.OrdinalIgnoreCase) ? Color.LightYellow :
                 value.ResultPublished && String.Equals(value.State, "invalidParameters", StringComparison.OrdinalIgnoreCase) ? Color.MistyRose :
                 value.ResultPublished && String.Equals(value.State, "invalidCommand", StringComparison.OrdinalIgnoreCase) ? Color.MistyRose :
@@ -450,7 +457,41 @@ namespace MioneAlarmmelder.Forms
             robotCommandPayloadBox.Text = robotCommandList.SelectedItems[0].Tag as string;
         }
 
-        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; if (alarmToolTip != null) alarmToolTip.Dispose(); if (alarmProgressForm != null) alarmProgressForm.Dispose(); if (errorListMenu != null) errorListMenu.Dispose(); trayIcon.Visible = false; trayIcon.Dispose(); } }
+        private void RobotCommandListKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                CopySelectedRobotCommands();
+                e.Handled = true;
+            }
+        }
+
+        private void RobotCommandPayloadKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.C && robotCommandPayloadBox.SelectionLength == 0)
+            {
+                CopySelectedRobotCommands();
+                e.Handled = true;
+            }
+        }
+
+        private void CopySelectedRobotCommands()
+        {
+            if (robotCommandList.SelectedItems.Count == 0)
+            {
+                if (robotCommandPayloadBox.Text.Length > 0) Clipboard.SetText(robotCommandPayloadBox.Text);
+                return;
+            }
+            List<string> values = new List<string>();
+            for (int i = 0; i < robotCommandList.SelectedItems.Count; i++)
+            {
+                string text = robotCommandList.SelectedItems[i].Tag as string;
+                if (!String.IsNullOrEmpty(text)) values.Add(text);
+            }
+            if (values.Count > 0) Clipboard.SetText(String.Join(Environment.NewLine + Environment.NewLine, values.ToArray()));
+        }
+
+        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; if (alarmToolTip != null) alarmToolTip.Dispose(); if (alarmProgressForm != null) alarmProgressForm.Dispose(); if (errorListMenu != null) errorListMenu.Dispose(); if (robotCommandMenu != null) robotCommandMenu.Dispose(); trayIcon.Visible = false; trayIcon.Dispose(); } }
         private void Resized(object sender, EventArgs e) { if (WindowState == FormWindowState.Minimized) Hide(); }
         private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); }
         private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3 || tabs.SelectedIndex == 5; }

@@ -19,6 +19,7 @@ namespace MioneAlarmmelder.Forms
         private int alarmSortColumn; private bool alarmSortAscending = false;
         private ToolTip alarmToolTip; private long toolTipAlarmId = -1;
         private AlarmProgressForm alarmProgressForm;
+        private ContextMenuStrip errorListMenu; private ToolStripMenuItem errorCopyMessageItem;
         private List<ErrorLogEntry> errorEntries = new List<ErrorLogEntry>(); private int errorSortColumn; private bool errorSortAscending = false;
         public event EventHandler SettingsSaved;
         public event EventHandler UpdateCheckRequested;
@@ -38,6 +39,7 @@ namespace MioneAlarmmelder.Forms
             testAlarmButton.Click += TestAlarmClick;
             urgentTestAlarmButton.Click += delegate { if (UrgentTestAlarmRequested != null) UrgentTestAlarmRequested(this, EventArgs.Empty); };
             updateCheckButton.Click += delegate { if (ReadFields() && UpdateCheckRequested != null) UpdateCheckRequested(this, EventArgs.Empty); };
+            dpProcessCheckButton.Click += delegate { RenderDpProcessFiles(); };
             errorRefreshButton.Click += delegate { LoadErrorLog(); };
             errorClearButton.Click += ErrorClearClick;
             ErrorLogger.ErrorLogged += ErrorWasLogged;
@@ -48,6 +50,11 @@ namespace MioneAlarmmelder.Forms
             acknowledgeSelectedButton.Click += AcknowledgeSelectedClick; acknowledgeAllButton.Click += AcknowledgeAllClick;
             alarmLimitBox.ValueChanged += AlarmLimitChanged;
             errorList.ColumnClick += ErrorColumnClick; errorViewFilter.SelectedIndexChanged += delegate { RenderErrorList(); };
+            errorListMenu = new ContextMenuStrip(); errorCopyMessageItem = new ToolStripMenuItem("Fehlermeldung kopieren");
+            errorCopyMessageItem.Click += delegate { CopySelectedErrorMessages(); };
+            errorListMenu.Opening += delegate { errorCopyMessageItem.Enabled = errorList.SelectedItems.Count > 0; };
+            errorListMenu.Items.Add(errorCopyMessageItem); errorList.ContextMenuStrip = errorListMenu;
+            errorList.KeyDown += ErrorListKeyDown;
             errorAcknowledgeSelectedButton.Click += ErrorAcknowledgeSelectedClick; errorAcknowledgeAllButton.Click += ErrorAcknowledgeAllClick;
             errorLimitBox.ValueChanged += ErrorLimitChanged;
             alarmToolTip = new ToolTip(); alarmToolTip.AutoPopDelay = 15000; alarmToolTip.InitialDelay = 300; alarmToolTip.ReshowDelay = 100; alarmToolTip.ToolTipTitle = "Alarmhilfe";
@@ -59,6 +66,7 @@ namespace MioneAlarmmelder.Forms
             trayIcon.DoubleClick += delegate { ShowWindow(); }; SetStatus("Wird gestartet ...", MonitorState.Waiting); ResetConnectionStatus();
             versionLabel.Text = "Version " + GitHubUpdateService.CurrentVersionLabel;
             errorPathLabel.Text = "Datei: " + ErrorLogger.FilePath; LoadErrorLog();
+            RenderDpProcessFiles();
             UpdateActionButtons(); overviewUpdateHighlight = HasUnacknowledgedUpdate(); RenderAlarmList();
         }
 
@@ -260,6 +268,25 @@ namespace MioneAlarmmelder.Forms
         {
             if (errorSortColumn == e.Column) errorSortAscending = !errorSortAscending; else { errorSortColumn = e.Column; errorSortAscending = true; } RenderErrorList();
         }
+        private void ErrorListKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                CopySelectedErrorMessages();
+                e.Handled = true;
+            }
+        }
+        private void CopySelectedErrorMessages()
+        {
+            if (errorList.SelectedItems.Count == 0) return;
+            List<string> messages = new List<string>();
+            for (int i = 0; i < errorList.SelectedItems.Count; i++)
+            {
+                ErrorLogEntry entry = errorList.SelectedItems[i].Tag as ErrorLogEntry;
+                if (entry != null && entry.Message.Length > 0) messages.Add(entry.Message);
+            }
+            if (messages.Count > 0) Clipboard.SetText(String.Join(Environment.NewLine, messages.ToArray()));
+        }
         private void ErrorAcknowledgeSelectedClick(object sender, EventArgs e)
         {
             if (errorList.SelectedItems.Count == 0) { MessageBox.Show("Bitte mindestens einen Fehler auswählen.", "Fehler bestätigen", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
@@ -290,12 +317,13 @@ namespace MioneAlarmmelder.Forms
             updateEnabledBox.Checked = settings.UpdateEnabled; updateRepositoryBox.Text = settings.UpdateRepository; updateAssetBox.Text = settings.UpdateAssetName;
             updateIntervalBox.Text = settings.UpdateCheckMinutes.ToString();
             updateChannelBox.SelectedIndex = String.Equals(settings.UpdateChannel, "beta", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            currentVersionLabel.Text = "Installierte Version: " + GitHubUpdateService.CurrentVersionLabel;
+            dpProcessEnabledBox.Checked = settings.DpProcessEnabled; dpProcessPathBox.Text = settings.DpProcessPath; dpProcessPollBox.Text = settings.DpProcessPollSeconds.ToString();
+            dpProcessTopicLabel.Text = "MQTT-Topic: " + (String.IsNullOrEmpty(settings.MqttUser) ? "<mqtt_benutzername>" : settings.MqttUser.Trim().Trim('/')) + "/Melkroboter";
         }
 
         private bool ReadFields()
         {
-            int mqttPort, tcpPort, poll, updateMinutes;
+            int mqttPort, tcpPort, poll, updateMinutes, dpProcessPoll;
             if (!Int32.TryParse(mqttPortBox.Text, out mqttPort) || mqttPort < 1 || mqttPort > 65535 ||
                 !Int32.TryParse(tcpPortBox.Text, out tcpPort) || tcpPort < 1 || tcpPort > 65535 ||
                 !Int32.TryParse(pollBox.Text, out poll) || poll < 1)
@@ -311,8 +339,26 @@ namespace MioneAlarmmelder.Forms
             settings.UpdateChannel = updateChannelBox.SelectedIndex == 1 ? "beta" : "stable";
             if (!Int32.TryParse(updateIntervalBox.Text, out updateMinutes) || updateMinutes < 5) { MessageBox.Show("Das Update-Prüfintervall muss mindestens 5 Minuten betragen.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             settings.UpdateCheckMinutes = updateMinutes;
+            if (!Int32.TryParse(dpProcessPollBox.Text, out dpProcessPoll) || dpProcessPoll < 5) { MessageBox.Show("Das Melkroboter-Prüfintervall muss mindestens 5 Sekunden betragen.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+            settings.DpProcessEnabled = dpProcessEnabledBox.Checked; settings.DpProcessPath = dpProcessPathBox.Text.Trim(); settings.DpProcessPollSeconds = dpProcessPoll;
             if (settings.UpdateEnabled && settings.UpdateRepository.Length > 0 && settings.UpdateRepository.IndexOf('/') < 1) { MessageBox.Show("Das GitHub-Repository muss im Format Besitzer/Repository angegeben werden.", "Ungültige Updatequelle", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             if (settings.UpdateAssetName.Length == 0) settings.UpdateAssetName = "MioneAlarmmelder-*.zip"; return true;
+        }
+
+        private void RenderDpProcessFiles()
+        {
+            if (dpProcessFileList == null) return;
+            dpProcessFileList.Items.Clear();
+            MilkingRobotFileCheck[] checks = MilkingRobotPublisher.CheckFiles(dpProcessPathBox.Text);
+            for (int i = 0; i < checks.Length; i++)
+            {
+                ListViewItem item = new ListViewItem(checks[i].Exists ? "OK" : "Fehlt");
+                item.SubItems.Add(checks[i].Name); item.SubItems.Add(checks[i].Path);
+                item.BackColor = checks[i].Exists ? Color.White : Color.MistyRose;
+                dpProcessFileList.Items.Add(item);
+            }
+            string user = String.IsNullOrEmpty(mqttUserBox.Text) ? "<mqtt_benutzername>" : mqttUserBox.Text.Trim().Trim('/');
+            dpProcessTopicLabel.Text = "MQTT-Topic: " + user + "/Melkroboter";
         }
 
         private void SaveClick(object sender, EventArgs e)
@@ -366,10 +412,10 @@ namespace MioneAlarmmelder.Forms
             alarmProgressForm.UpdateProgress(value);
         }
 
-        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; if (alarmToolTip != null) alarmToolTip.Dispose(); if (alarmProgressForm != null) alarmProgressForm.Dispose(); trayIcon.Visible = false; trayIcon.Dispose(); } }
+        private void MainFormClosing(object sender, FormClosingEventArgs e) { if (!allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); trayIcon.ShowBalloonTip(1500, "Mione Alarmmelder", "Die Überwachung läuft im Hintergrund weiter.", ToolTipIcon.Info); } else { ErrorLogger.ErrorLogged -= ErrorWasLogged; if (alarmToolTip != null) alarmToolTip.Dispose(); if (alarmProgressForm != null) alarmProgressForm.Dispose(); if (errorListMenu != null) errorListMenu.Dispose(); trayIcon.Visible = false; trayIcon.Dispose(); } }
         private void Resized(object sender, EventArgs e) { if (WindowState == FormWindowState.Minimized) Hide(); }
         private void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); }
-        private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3; }
+        private void UpdateActionButtons() { saveButton.Visible = tabs.SelectedIndex == 1 || tabs.SelectedIndex == 2 || tabs.SelectedIndex == 3 || tabs.SelectedIndex == 4; }
         private void DrawTab(object sender, DrawItemEventArgs e)
         {
             Rectangle bounds = tabs.GetTabRect(e.Index);

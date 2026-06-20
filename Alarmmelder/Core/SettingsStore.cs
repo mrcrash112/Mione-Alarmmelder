@@ -38,6 +38,9 @@ namespace MioneAlarmmelder.Core
                 s.UpdateChannel = Get(d, "UpdateChannel", "stable").ToLowerInvariant() == "beta" ? "beta" : "stable";
                 s.UpdateCheckMinutes = Math.Max(5, GetInt(d, "UpdateCheckMinutes", 60));
                 s.AlarmHistoryLimit = Limit(GetInt(d, "AlarmHistoryLimit", 2500)); s.ErrorHistoryLimit = Limit(GetInt(d, "ErrorHistoryLimit", 2500));
+                s.DpProcessEnabled = GetBool(d, "DpProcessEnabled", false);
+                s.DpProcessPath = Get(d, "DpProcessPath", @"D:\DairyPln");
+                s.DpProcessPollSeconds = Math.Max(5, GetInt(d, "DpProcessPollSeconds", 30));
                 MigrateOldDefaults(s);
             }
             catch { return AppSettings.CreateDefault(); }
@@ -68,6 +71,9 @@ namespace MioneAlarmmelder.Core
                 Write(w, "UpdateChannel", s.UpdateChannel);
                 Write(w, "UpdateCheckMinutes", s.UpdateCheckMinutes.ToString());
                 Write(w, "AlarmHistoryLimit", s.AlarmHistoryLimit.ToString()); Write(w, "ErrorHistoryLimit", s.ErrorHistoryLimit.ToString());
+                Write(w, "DpProcessEnabled", s.DpProcessEnabled.ToString());
+                Write(w, "DpProcessPath", s.DpProcessPath);
+                Write(w, "DpProcessPollSeconds", s.DpProcessPollSeconds.ToString());
                 w.WriteEndElement();
             }
         }

@@ -9,13 +9,15 @@ namespace MioneAlarmmelder
 {
     public sealed class AlarmApplicationContext : ApplicationContext
     {
-        private AppSettings settings; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher;
+        private AppSettings settings; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher; private MilkingRobotPublisher milkingRobotPublisher;
+        private MilkingRobotCommandSubscriber milkingRobotCommandSubscriber;
         private MqttProgressSubscriber mqttProgressSubscriber;
-        private System.Threading.Timer heartbeatTimer, updateTimer; private int heartbeatPending, updateCheckPending;
+        private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending;
         private string notifiedUpdateTag = "";
         private bool heartbeatValue, mqttModemActive;
         private DateTime lastModemStatusUtc = DateTime.MinValue;
         private bool modemStatusTimedOut;
+        private const int ModemStatusTimeoutSeconds = 60;
 
         public AlarmApplicationContext()
         {
@@ -51,6 +53,14 @@ namespace MioneAlarmmelder
                 main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.MqttEnabled ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.MqttEnabled ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
                 lastModemStatusUtc = DateTime.UtcNow;
                 heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
+                if (settings.DpProcessEnabled && settings.MqttEnabled)
+                {
+                    milkingRobotPublisher = new MilkingRobotPublisher(settings);
+                    milkingRobotCommandSubscriber = new MilkingRobotCommandSubscriber(settings);
+                    milkingRobotCommandSubscriber.Start();
+                    int robotInterval = Math.Max(5, settings.DpProcessPollSeconds) * 1000;
+                    milkingRobotTimer = new System.Threading.Timer(MilkingRobotTick, null, 3000, robotInterval);
+                }
             }
             catch (Exception ex) { ErrorLogger.Log("Dateiüberwachung", ex); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
@@ -60,9 +70,13 @@ namespace MioneAlarmmelder
         {
             if (heartbeatTimer != null) { heartbeatTimer.Dispose(); heartbeatTimer = null; }
             if (updateTimer != null) { updateTimer.Dispose(); updateTimer = null; }
+            if (milkingRobotTimer != null) { milkingRobotTimer.Dispose(); milkingRobotTimer = null; }
+            if (milkingRobotCommandSubscriber != null) { milkingRobotCommandSubscriber.Dispose(); milkingRobotCommandSubscriber = null; }
             if (mqttProgressSubscriber != null) { mqttProgressSubscriber.Dispose(); mqttProgressSubscriber = null; }
             Interlocked.Exchange(ref heartbeatPending, 0);
+            Interlocked.Exchange(ref milkingRobotPending, 0);
             heartbeatValue = false;
+            milkingRobotPublisher = null;
             mqttModemActive = false;
             lastModemStatusUtc = DateTime.MinValue;
             modemStatusTimedOut = false;
@@ -163,8 +177,8 @@ namespace MioneAlarmmelder
             else if (e.MqttEnabled && !e.MqttSuccessful) main.SetModemStatus("MQTT", "Verbindung fehlerhaft", MonitorState.Error);
             else if (e.MqttEnabled)
             {
-                bool fresh = DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= 15;
-                main.SetModemStatus("MQTT", mqttModemActive && fresh ? "aktiv" : fresh ? "warte auf Rückmeldung" : "keine Rückmeldung seit 15 Sekunden",
+                bool fresh = DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= ModemStatusTimeoutSeconds;
+                main.SetModemStatus("MQTT", mqttModemActive && fresh ? "aktiv" : fresh ? "warte auf Rückmeldung" : "keine Rückmeldung seit 60 Sekunden",
                     mqttModemActive && fresh ? MonitorState.Ok : fresh ? MonitorState.Waiting : MonitorState.Error);
             }
             else main.SetModemStatus("", "deaktiviert", MonitorState.Disabled);
@@ -172,13 +186,13 @@ namespace MioneAlarmmelder
         }
         private void CheckModemStatusTimeout()
         {
-            if (lastModemStatusUtc == DateTime.MinValue || DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= 15) return;
+            if (lastModemStatusUtc == DateTime.MinValue || DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= ModemStatusTimeoutSeconds) return;
             mqttModemActive = false;
-            main.SetModemStatus(settings.TcpEnabled ? "Socket" : "MQTT", "keine Rückmeldung seit 15 Sekunden", MonitorState.Error);
+            main.SetModemStatus(settings.TcpEnabled ? "Socket" : "MQTT", "keine Rückmeldung seit 60 Sekunden", MonitorState.Error);
             if (!modemStatusTimedOut)
             {
                 modemStatusTimedOut = true;
-                ErrorLogger.Log("Modem-Heartbeat", "Seit mehr als 15 Sekunden wurde kein Modemstatus empfangen.");
+                ErrorLogger.Log("Modem-Heartbeat", "Seit mehr als 60 Sekunden wurde kein Modemstatus empfangen.");
             }
         }
         private void MobileConfigCompleted(object sender, DispatchResultEventArgs e)
@@ -186,6 +200,16 @@ namespace MioneAlarmmelder
             if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
+        }
+        private void MilkingRobotTick(object state)
+        {
+            if (milkingRobotPublisher == null || Interlocked.Exchange(ref milkingRobotPending, 1) != 0) return;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { milkingRobotPublisher.Publish(); }
+                catch (Exception ex) { ErrorLogger.Log("Melkroboter-MQTT", ex); }
+                finally { Interlocked.Exchange(ref milkingRobotPending, 0); }
+            });
         }
         private void ScheduleUpdateCheck()
         {

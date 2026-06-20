@@ -16,7 +16,7 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - wiederholt die Updateprüfung im Hintergrund und markiert verfügbare Updates in der Übersicht mit Priorität `message`
 - zeigt Datei-, Verbindungs-, Heartbeat- und Updatefehler in einem eigenen Protokoll-Tab
 - zeigt unter der TCP-LED den Modemstatus: per Socket anhand der direkten Heartbeat-Verbindung, per MQTT nach einer Rückmeldung mit passender IMEI
-- meldet nach 15 Sekunden ohne Modemstatus-Heartbeat einen Verbindungsverlust
+- meldet nach 60 Sekunden ohne Modemstatus-Heartbeat einen Verbindungsverlust
 - zeigt Modem-Firmware, Recovery, WWW-Version, Stable/Beta-Kanal und OTA-Status
 - bietet in der Übersicht einen dringenden Testalarm mit Priorität `urgent`, der gespeichert und über MQTT sowie TCP versendet wird
 - zeigt Kuhnummer und installierte Programmversion direkt in der Oberfläche
@@ -25,6 +25,7 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - speichert eine konfigurierbare Anzahl Alarme und Fehler mit Bestätigungsstatus, Filtern und sortierbaren Spalten
 - ergänzt fehlende Alarmtexte aus `Mione_AlarmCodes_UK_DE.xlsx` und zeigt Ursache/Lösung als Hinweis
 - speichert das MQTT-Passwort mit Windows DPAPI verschlüsselt
+- kann DPProcessControl/Melkroboter-Daten aus `D:\DairyPln` prüfen und nach `<Benutzername>/Melkroboter` per MQTT veröffentlichen
 - läuft nach dem Schließen im Infobereich weiter; LED-Farbe zeigt den Zustand
 - zeigt beim Start das Banner und auf jedem Dialog das Logo
 
@@ -84,6 +85,24 @@ Das Modem sendet alle fünf Sekunden einen eigenen Status-Heartbeat nach
 Über TCP fordert MiOne denselben Datensatz mit `{"type":"statusRequest"}` an.
 Der Status enthält außerdem die installierten Versionen von Hauptprogramm,
 Recovery und WWW sowie Kanal, Updateverfügbarkeit und Fortschritt.
+
+Im Tab **Melkroboter** kann die DPProcessControl-Brücke aktiviert werden. Der
+Standardpfad ist `D:\DairyPln`; die Pfadprüfung kontrolliert unter anderem
+`DPProcessControl.exe`, `RDM_DP_Com.dll`, `RDM_DP_Com_CORBA.dll`,
+`RDM_DP_Com_Server.dll`, `DP_RDM_Link.dll`, `RDM_JNI_DB.dll` und
+`RDM\CORBA\DP_RDM_COM.ior`. Bei aktivierter MQTT-Verbindung sendet MiOne einen
+retained JSON-Snapshot nach `<Benutzername>/Melkroboter` und den aus
+`rdm-manager.jar`/`RDM_DP_Com` abgeleiteten Funktionskatalog nach
+`<Benutzername>/Melkroboter/Funktionen`. Enthalten sind unter anderem
+Roboterinitialisierung, Systeminitialisierung, Automatikbetrieb,
+System-/Kurzreinigung, Melkvorgang abbrechen, Roboterposition, Dosierer-
+Kalibrierung und Probenahme.
+Der Funktionskatalog enthält je Funktion die benötigten Parameter und ein
+`payloadExample`. Befehle können an `<Benutzername>/Melkroboter/Command` oder
+`<Benutzername>/Melkroboter/Befehl` gesendet werden, zum Beispiel
+`{"requestId":"1","command":"stopMilking","boxNumber":1}`. Die Antwort erscheint
+auf `<Benutzername>/Melkroboter/Result`; fehlende Parameter werden dort als
+`invalidParameters` gemeldet.
 
 Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 

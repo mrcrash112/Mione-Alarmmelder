@@ -29,6 +29,9 @@ namespace MioneAlarmmelder.Core
         public int UpdateCheckMinutes { get; set; }
         public int AlarmHistoryLimit { get; set; }
         public int ErrorHistoryLimit { get; set; }
+        public bool DpProcessEnabled { get; set; }
+        public string DpProcessPath { get; set; }
+        public int DpProcessPollSeconds { get; set; }
 
         public static AppSettings CreateDefault()
         {
@@ -42,7 +45,8 @@ namespace MioneAlarmmelder.Core
                 MqttHost = "", MqttPort = 1883, ModemImei = "",
                 TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
                 UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateChannel = "stable", UpdateCheckMinutes = 60,
-                AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500
+                AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500,
+                DpProcessEnabled = false, DpProcessPath = @"D:\DairyPln", DpProcessPollSeconds = 30
             };
         }
 

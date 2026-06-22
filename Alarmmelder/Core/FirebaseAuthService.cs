@@ -100,9 +100,9 @@ namespace MioneAlarmmelder.Core
             EnsureLoginConfiguration();
 
             FirebaseLoginPageConfig config = new FirebaseLoginPageConfig();
-            config.ApiKey = settings.FirebaseApiKey;
-            config.AuthDomain = BuildAuthDomain();
-            config.ProjectId = settings.FirebaseProjectId;
+            config.ApiKey = GetConfiguredApiKey();
+            config.AuthDomain = GetConfiguredAuthDomain();
+            config.ProjectId = GetConfiguredProjectId();
             config.InitialEmail = initialEmail ?? String.Empty;
             config.InitialPhone = initialPhone ?? String.Empty;
 
@@ -129,24 +129,46 @@ namespace MioneAlarmmelder.Core
 
         private void EnsureLoginConfiguration()
         {
-            if (String.IsNullOrEmpty(settings.FirebaseApiKey)) throw new InvalidOperationException("Bitte zuerst den Firebase API Key im Tab 'User Login' eintragen.");
-            if (String.IsNullOrEmpty(BuildAuthDomain())) throw new InvalidOperationException("Bitte zuerst die Firebase Auth-Domain im Tab 'User Login' eintragen.");
-            if (String.IsNullOrEmpty(settings.FirebaseProjectId)) throw new InvalidOperationException("Bitte zuerst die Firebase Project ID im Tab 'User Login' eintragen.");
+            if (String.IsNullOrEmpty(GetConfiguredApiKey())) throw new InvalidOperationException("Firebase API-Konfiguration fehlt.");
+            if (String.IsNullOrEmpty(GetConfiguredAuthDomain())) throw new InvalidOperationException("Firebase Auth-Domain fehlt.");
+            if (String.IsNullOrEmpty(GetConfiguredProjectId())) throw new InvalidOperationException("Firebase Project ID fehlt.");
         }
 
         private string EnsureApiKey()
         {
-            if (String.IsNullOrEmpty(settings.FirebaseApiKey)) throw new InvalidOperationException("Bitte zuerst den Firebase API Key im Tab 'User Login' eintragen.");
-            return settings.FirebaseApiKey.Trim();
+            string apiKey = GetConfiguredApiKey();
+            if (String.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("Firebase API-Konfiguration fehlt.");
+            return apiKey;
         }
 
         private string BuildAuthDomain()
         {
-            string authDomain = (settings.FirebaseAuthDomain ?? String.Empty).Trim();
+            string authDomain = GetConfiguredAuthDomain();
             if (authDomain.Length > 0) return authDomain;
-            string projectId = (settings.FirebaseProjectId ?? String.Empty).Trim();
+            string projectId = GetConfiguredProjectId();
             if (projectId.Length == 0) return "";
             return projectId + ".firebaseapp.com";
+        }
+
+        private string GetConfiguredApiKey()
+        {
+            string apiKey = (settings.FirebaseApiKey ?? String.Empty).Trim();
+            if (apiKey.Length > 0) return apiKey;
+            return FirebaseDefaults.ApiKey;
+        }
+
+        private string GetConfiguredAuthDomain()
+        {
+            string authDomain = (settings.FirebaseAuthDomain ?? String.Empty).Trim();
+            if (authDomain.Length > 0) return authDomain;
+            return FirebaseDefaults.AuthDomain;
+        }
+
+        private string GetConfiguredProjectId()
+        {
+            string projectId = (settings.FirebaseProjectId ?? String.Empty).Trim();
+            if (projectId.Length > 0) return projectId;
+            return FirebaseDefaults.ProjectId;
         }
 
         private FirebaseAuthSession RefreshWithToken(string refreshToken, bool preserveProfile)

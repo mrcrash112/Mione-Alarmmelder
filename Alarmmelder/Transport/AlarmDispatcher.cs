@@ -25,7 +25,7 @@ namespace MioneAlarmmelder.Transport
                 StringBuilder mqttErrors = new StringBuilder(); StringBuilder tcpErrors = new StringBuilder();
                 bool mqttSuccessful = false, backupSuccessful = false, tcpSuccessful = false;
                 string mqttError = "", backupError = "";
-                if (!snapshot.SystemMqttReady && !snapshot.TcpEnabled) errors.Append("Kein Versandweg aktiviert. ");
+                if (!snapshot.SystemMqttReady && !snapshot.BackupMqttConfigured && !snapshot.TcpEnabled) errors.Append("Kein Versandweg aktiviert. ");
                 string json = BuildJson(alarm, snapshot.ModemImei);
                 if (snapshot.SystemMqttReady)
                 {
@@ -44,6 +44,19 @@ namespace MioneAlarmmelder.Transport
                     {
                         backupError = mqtt.BackupError;
                         ErrorLogger.Log("Backup-MQTT", "Alarm " + alarm.Code + ": " + mqtt.BackupError);
+                        errors.Append("Backup-MQTT: " + mqtt.BackupError + " ");
+                    }
+                }
+                else if (snapshot.BackupMqttConfigured)
+                {
+                    MqttRoutePublishResult mqtt = MqttRoutePublisher.Publish(snapshot, "Alarmfunktionen/Alarm", json, false);
+                    backupSuccessful = mqtt.BackupSuccessful;
+                    if (mqtt.BackupSuccessful) sent++;
+                    if (!String.IsNullOrEmpty(mqtt.BackupError))
+                    {
+                        backupError = mqtt.BackupError;
+                        ErrorLogger.Log("Backup-MQTT", "Alarm " + alarm.Code + ": " + mqtt.BackupError);
+                        errors.Append("Backup-MQTT: " + mqtt.BackupError + " ");
                     }
                 }
                 if (snapshot.TcpEnabled)
@@ -58,7 +71,7 @@ namespace MioneAlarmmelder.Transport
                     catch (Exception ex) { tcpErrors.Append(ex.Message); errors.Append("TCP: " + ex.Message + " "); }
                 }
                 OnCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.SystemMqttReady, mqttSuccessful,
-                    mqttErrors.ToString().Trim(), snapshot.BackupMqttConfigured && snapshot.SystemMqttReady, backupSuccessful, backupError,
+                    mqttErrors.ToString().Trim(), snapshot.BackupMqttConfigured, backupSuccessful, backupError,
                     snapshot.TcpEnabled, tcpSuccessful, tcpErrors.ToString().Trim()));
             });
         }
@@ -81,6 +94,14 @@ namespace MioneAlarmmelder.Transport
                     if (mqtt.BackupSuccessful) sent++;
                     if (!mqtt.SystemSuccessful) { mqttError = mqtt.SystemError; errors.Append("MQTT-Heartbeat: " + mqtt.SystemError + " "); }
                     if (!String.IsNullOrEmpty(mqtt.BackupError)) { backupError = mqtt.BackupError; ErrorLogger.Log("Backup-MQTT", "Heartbeat: " + mqtt.BackupError); }
+                    if (!String.IsNullOrEmpty(mqtt.BackupError)) errors.Append("Backup-MQTT-Heartbeat: " + mqtt.BackupError + " ");
+                }
+                else if (snapshot.BackupMqttConfigured)
+                {
+                    MqttRoutePublishResult mqtt = MqttRoutePublisher.Publish(snapshot, "Alarmfunktionen/Heartbeat", json, false);
+                    backupSuccessful = mqtt.BackupSuccessful;
+                    if (mqtt.BackupSuccessful) sent++;
+                    if (!String.IsNullOrEmpty(mqtt.BackupError)) { backupError = mqtt.BackupError; ErrorLogger.Log("Backup-MQTT", "Heartbeat: " + mqtt.BackupError); errors.Append("Backup-MQTT-Heartbeat: " + mqtt.BackupError + " "); }
                 }
                 if (snapshot.TcpEnabled)
                 {
@@ -94,7 +115,7 @@ namespace MioneAlarmmelder.Transport
                     catch (Exception ex) { tcpError = ex.Message; errors.Append("TCP-Heartbeat: " + ex.Message + " "); }
                 }
                 OnHeartbeatCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.SystemMqttReady,
-                    mqttSuccessful, mqttError, snapshot.BackupMqttConfigured && snapshot.SystemMqttReady, backupSuccessful, backupError,
+                    mqttSuccessful, mqttError, snapshot.BackupMqttConfigured, backupSuccessful, backupError,
                     snapshot.TcpEnabled, tcpSuccessful, tcpError));
             });
         }
@@ -123,7 +144,18 @@ namespace MioneAlarmmelder.Transport
                         errors.Append("MQTT-Mobilkonfiguration: " + mqttError + " ");
                     }
                     if (!String.IsNullOrEmpty(modemImei.BackupError)) { backupError = modemImei.BackupError; ErrorLogger.Log("Backup-MQTT", "Mobilkonfiguration/modemImei: " + modemImei.BackupError); }
-                    if (!String.IsNullOrEmpty(config.BackupError)) { backupError = config.BackupError; ErrorLogger.Log("Backup-MQTT", "Mobilkonfiguration: " + config.BackupError); }
+                    if (!String.IsNullOrEmpty(modemImei.BackupError)) errors.Append("Backup-MQTT-Mobilkonfiguration: " + modemImei.BackupError + " ");
+                    if (!String.IsNullOrEmpty(config.BackupError)) { backupError = config.BackupError; ErrorLogger.Log("Backup-MQTT", "Mobilkonfiguration: " + config.BackupError); errors.Append("Backup-MQTT-Mobilkonfiguration: " + config.BackupError + " "); }
+                }
+                else if (snapshot.BackupMqttConfigured)
+                {
+                    MqttRoutePublishResult modemImei = MqttRoutePublisher.Publish(snapshot, "Alarmfunktionen/Config/Mobile/modemImei", snapshot.ModemImei, true);
+                    MqttRoutePublishResult config = MqttRoutePublisher.Publish(snapshot, "Alarmfunktionen/Config/Mobile", json, true);
+                    backupSuccessful = modemImei.BackupSuccessful && config.BackupSuccessful;
+                    if (modemImei.BackupSuccessful) sent++;
+                    if (config.BackupSuccessful) sent++;
+                    if (!String.IsNullOrEmpty(modemImei.BackupError)) { backupError = modemImei.BackupError; ErrorLogger.Log("Backup-MQTT", "Mobilkonfiguration/modemImei: " + modemImei.BackupError); errors.Append("Backup-MQTT-Mobilkonfiguration: " + modemImei.BackupError + " "); }
+                    if (!String.IsNullOrEmpty(config.BackupError)) { backupError = config.BackupError; ErrorLogger.Log("Backup-MQTT", "Mobilkonfiguration: " + config.BackupError); errors.Append("Backup-MQTT-Mobilkonfiguration: " + config.BackupError + " "); }
                 }
                 if (snapshot.TcpEnabled)
                 {
@@ -131,7 +163,7 @@ namespace MioneAlarmmelder.Transport
                     catch (Exception ex) { tcpError = ex.Message; errors.Append("TCP-Mobilkonfiguration: " + ex.Message + " "); }
                 }
                 OnMobileConfigCompleted(new DispatchResultEventArgs(sent, errors.ToString().Trim(), snapshot.SystemMqttReady, mqttSuccessful, mqttError,
-                    snapshot.BackupMqttConfigured && snapshot.SystemMqttReady, backupSuccessful, backupError,
+                    snapshot.BackupMqttConfigured, backupSuccessful, backupError,
                     snapshot.TcpEnabled, tcpSuccessful, tcpError));
             });
         }

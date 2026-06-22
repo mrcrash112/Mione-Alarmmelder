@@ -56,6 +56,7 @@ namespace MioneAlarmmelder
             {
                 monitor.Start(); main.SetPhones(monitor.GetMobileConfigurations()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
                 main.SetMqttStatus(settings.SystemMqttReady ? "Online" : "Offline", settings.SystemMqttReady ? MonitorState.Ok : MonitorState.Disabled);
+                main.SetBackupMqttStatus(settings.BackupMqttConfigured ? "bereit" : "deaktiviert", settings.BackupMqttConfigured ? MonitorState.Waiting : MonitorState.Disabled);
                 main.SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
                 main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.SystemMqttReady ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.SystemMqttReady ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.SystemMqttReady ? MonitorState.Waiting : MonitorState.Disabled);
                 main.SetFirmwareStatus(settings.TcpEnabled || settings.SystemMqttReady ? "warte auf Status" : "deaktiviert", settings.TcpEnabled || settings.SystemMqttReady ? MonitorState.Waiting : MonitorState.Disabled);
@@ -159,6 +160,8 @@ namespace MioneAlarmmelder
         {
             main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Online" : "Offline") : "Offline",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
+            main.SetBackupMqttStatus(e.BackupMqttEnabled ? (e.BackupMqttSuccessful ? "Online" : "Offline") : "deaktiviert",
+                e.BackupMqttEnabled ? (e.BackupMqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Versand erfolgreich" : "Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             if (e.Error.Length > 0) { ErrorLogger.Log("Alarmversand", e.Error); main.SetStatus("Versandfehler - siehe Fehlerprotokoll", MonitorState.Error); }
@@ -178,6 +181,8 @@ namespace MioneAlarmmelder
             Interlocked.Exchange(ref heartbeatPending, 0);
             main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Online" : "Offline") : "Offline",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
+            main.SetBackupMqttStatus(e.BackupMqttEnabled ? (e.BackupMqttSuccessful ? "Online" : "Offline") : "deaktiviert",
+                e.BackupMqttEnabled ? (e.BackupMqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             if (e.TcpEnabled && !e.TcpSuccessful) main.SetModemStatus("Socket", "nicht erreichbar", MonitorState.Error);
@@ -205,6 +210,7 @@ namespace MioneAlarmmelder
         private void MobileConfigCompleted(object sender, DispatchResultEventArgs e)
         {
             if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Online" : "Offline", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
+            if (e.BackupMqttEnabled) main.SetBackupMqttStatus(e.BackupMqttSuccessful ? "Online" : "Offline", e.BackupMqttSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }

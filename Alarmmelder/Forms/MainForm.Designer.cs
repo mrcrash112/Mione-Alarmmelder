@@ -6,7 +6,7 @@ namespace MioneAlarmmelder.Forms
     partial class MainForm
     {
         private PictureBox logoPicture; private Label titleLabel, versionLabel; private Label statusLabel; private Panel ledPanel;
-        private Label mqttStatusLabel, tcpStatusLabel, modemStatusLabel, firmwareStatusLabel; private Panel mqttLedPanel, tcpLedPanel, modemLedPanel, firmwareLedPanel;
+        private Label mqttStatusLabel, backupStatusLabel, tcpStatusLabel, modemStatusLabel, firmwareStatusLabel; private Panel mqttLedPanel, backupLedPanel, tcpLedPanel, modemLedPanel, firmwareLedPanel;
         private TabControl tabs; private ListView alarmList; private ListView phoneList;
         private TextBox messagePathBox, alarmSettingsPathBox, priorityPathBox, translationPathBox, alarmCatalogPathBox;
         private CheckBox mqttEnabledBox, tcpEnabledBox, startupBox, alarmProgressBox;
@@ -35,13 +35,15 @@ namespace MioneAlarmmelder.Forms
             ledPanel = new Panel(); ledPanel.Location = new Point(104, 54); ledPanel.Size = new Size(14, 14); ledPanel.BackColor = Color.Goldenrod;
             mqttLedPanel = new Panel(); mqttLedPanel.Location = new Point(515, 25); mqttLedPanel.Size = new Size(14, 14); mqttLedPanel.BackColor = Color.Gray;
             mqttStatusLabel = new Label(); mqttStatusLabel.Text = "System-MQTT: Offline"; mqttStatusLabel.Location = new Point(536, 24); mqttStatusLabel.Size = new Size(285, 20);
-            tcpLedPanel = new Panel(); tcpLedPanel.Location = new Point(515, 54); tcpLedPanel.Size = new Size(14, 14); tcpLedPanel.BackColor = Color.Gray;
-            tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 53); tcpStatusLabel.Size = new Size(285, 20);
-            modemLedPanel = new Panel(); modemLedPanel.Location = new Point(515, 81); modemLedPanel.Size = new Size(14, 14); modemLedPanel.BackColor = Color.Gray;
-            modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem: deaktiviert"; modemStatusLabel.Location = new Point(536, 80); modemStatusLabel.Size = new Size(285, 20);
+            backupLedPanel = new Panel(); backupLedPanel.Location = new Point(515, 54); backupLedPanel.Size = new Size(14, 14); backupLedPanel.BackColor = Color.Gray;
+            backupStatusLabel = new Label(); backupStatusLabel.Text = "Backup-MQTT: deaktiviert"; backupStatusLabel.Location = new Point(536, 53); backupStatusLabel.Size = new Size(285, 20);
+            tcpLedPanel = new Panel(); tcpLedPanel.Location = new Point(515, 83); tcpLedPanel.Size = new Size(14, 14); tcpLedPanel.BackColor = Color.Gray;
+            tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 82); tcpStatusLabel.Size = new Size(285, 20);
+            modemLedPanel = new Panel(); modemLedPanel.Location = new Point(515, 112); modemLedPanel.Size = new Size(14, 14); modemLedPanel.BackColor = Color.Gray;
+            modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem: deaktiviert"; modemStatusLabel.Location = new Point(536, 111); modemStatusLabel.Size = new Size(285, 20);
             firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
             firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
-            tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 108); tabs.Size = new Size(826, 434);
+            tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 136); tabs.Size = new Size(826, 406);
             overviewPage = new TabPage("Übersicht"); userLoginPage = new TabPage("User Login"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage robotCommands = new TabPage("Funktionslog"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
             alarmList = new ListView(); alarmList.Dock = DockStyle.Fill; alarmList.View = View.Details; alarmList.FullRowSelect = true; alarmList.GridLines = true;
@@ -59,9 +61,9 @@ namespace MioneAlarmmelder.Forms
             alarmTools.Controls.Add(viewLabel); alarmTools.Controls.Add(alarmViewFilter); alarmTools.Controls.Add(priorityLabel); alarmTools.Controls.Add(alarmPriorityFilter); alarmTools.Controls.Add(alarmLimitLabel); alarmTools.Controls.Add(alarmLimitBox); alarmTools.Controls.Add(acknowledgeSelectedButton); alarmTools.Controls.Add(acknowledgeAllButton); alarmTools.Controls.Add(urgentTestAlarmButton);
             overviewPage.Controls.Add(alarmList); overviewPage.Controls.Add(alarmTools);
             GroupBox firebaseConfig = new GroupBox(); firebaseConfig.Text = "Firebase-Konfiguration"; firebaseConfig.Location = new Point(15, 12); firebaseConfig.Size = new Size(385, 385);
-            firebaseApiKeyBox = AddField(firebaseConfig, "API Key", 58);
-            firebaseAuthDomainBox = AddField(firebaseConfig, "Auth Domain", 92);
-            firebaseProjectIdBox = AddField(firebaseConfig, "Project ID", 126);
+            firebaseApiKeyBox = AddField(firebaseConfig, "API Key (fest)", 58); firebaseApiKeyBox.ReadOnly = true;
+            firebaseAuthDomainBox = AddField(firebaseConfig, "Auth Domain (fest)", 92); firebaseAuthDomainBox.ReadOnly = true;
+            firebaseProjectIdBox = AddField(firebaseConfig, "Project ID (fest)", 126); firebaseProjectIdBox.ReadOnly = true;
             firebaseEmailBox = AddField(firebaseConfig, "E-Mail", 160);
             firebasePhoneBox = AddField(firebaseConfig, "Telefon", 194);
             firebaseUidBox = AddField(firebaseConfig, "System-ID", 228); firebaseUidBox.ReadOnly = true;
@@ -152,7 +154,7 @@ namespace MioneAlarmmelder.Forms
             saveButton = new Button(); saveButton.Text = "Einstellungen speichern"; saveButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; saveButton.Location = new Point(650, 555); saveButton.Size = new Size(188, 32); saveButton.Visible = false;
             infoButton = new Button(); infoButton.Text = "Info"; infoButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; infoButton.Location = new Point(12, 555); infoButton.Size = new Size(100, 32);
             Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(versionLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);
-            Controls.Add(mqttLedPanel); Controls.Add(mqttStatusLabel); Controls.Add(tcpLedPanel); Controls.Add(tcpStatusLabel); Controls.Add(modemLedPanel); Controls.Add(modemStatusLabel);
+            Controls.Add(mqttLedPanel); Controls.Add(mqttStatusLabel); Controls.Add(backupLedPanel); Controls.Add(backupStatusLabel); Controls.Add(tcpLedPanel); Controls.Add(tcpStatusLabel); Controls.Add(modemLedPanel); Controls.Add(modemStatusLabel);
             Controls.Add(firmwareLedPanel); Controls.Add(firmwareStatusLabel);
             Controls.Add(tabs); Controls.Add(saveButton); Controls.Add(infoButton);
             ResumeLayout(false); PerformLayout();

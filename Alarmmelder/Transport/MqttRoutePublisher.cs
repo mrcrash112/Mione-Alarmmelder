@@ -24,7 +24,7 @@ namespace MioneAlarmmelder.Transport
                 }
             }
 
-            if (settings.BackupMqttConfigured && settings.SystemMqttReady)
+            if (settings.BackupMqttConfigured)
             {
                 result.BackupEnabled = true;
                 try

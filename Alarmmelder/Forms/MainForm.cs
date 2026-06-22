@@ -206,6 +206,7 @@ namespace MioneAlarmmelder.Forms
         }
 
         public void SetMqttStatus(string text, MonitorState state) { SetTransportStatus(mqttLedPanel, mqttStatusLabel, "System-MQTT", text, state); }
+        public void SetBackupMqttStatus(string text, MonitorState state) { SetTransportStatus(backupLedPanel, backupStatusLabel, "Backup-MQTT", text, state); }
         public void SetTcpStatus(string text, MonitorState state) { SetTransportStatus(tcpLedPanel, tcpStatusLabel, "TCP", text, state); }
         public void SetModemStatus(string transport, string text, MonitorState state)
         {
@@ -225,8 +226,11 @@ namespace MioneAlarmmelder.Forms
         public void ResetConnectionStatus()
         {
             bool systemReady = settings.SystemMqttReady;
+            bool backupReady = settings.BackupMqttConfigured;
             SetMqttStatus(systemReady ? "Online" : "Offline",
                 systemReady ? MonitorState.Ok : MonitorState.Disabled);
+            SetBackupMqttStatus(backupReady ? "bereit" : "deaktiviert",
+                backupReady ? MonitorState.Waiting : MonitorState.Disabled);
             SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
             SetModemStatus(settings.TcpEnabled ? "Socket" : systemReady ? "MQTT" : "",
                 settings.TcpEnabled ? "wird geprüft" : systemReady ? "warte auf Rückmeldung" : "deaktiviert",
@@ -347,6 +351,9 @@ namespace MioneAlarmmelder.Forms
 
         private void LoadFirebaseFields()
         {
+            settings.FirebaseApiKey = FirebaseDefaults.ApiKey;
+            settings.FirebaseAuthDomain = FirebaseDefaults.AuthDomain;
+            settings.FirebaseProjectId = FirebaseDefaults.ProjectId;
             firebaseApiKeyBox.Text = settings.FirebaseApiKey;
             firebaseAuthDomainBox.Text = settings.FirebaseAuthDomain;
             firebaseProjectIdBox.Text = settings.FirebaseProjectId;
@@ -453,21 +460,48 @@ namespace MioneAlarmmelder.Forms
         private void TestClick(object sender, EventArgs e)
         {
             if (!ReadFields()) return;
-            if (!settings.SystemMqttReady && !settings.TcpEnabled)
-            { MessageBox.Show("Bitte zuerst Firebase anmelden oder TCP aktivieren.", "Verbindungstest", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (!settings.SystemMqttReady && !settings.BackupMqttConfigured && !settings.TcpEnabled)
+            { MessageBox.Show("Bitte zuerst System-, Backup-MQTT oder TCP aktivieren.", "Verbindungstest", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             Cursor = Cursors.WaitCursor; string errors = "";
             if (settings.SystemMqttReady)
             {
-                string topicRoot = settings.SystemMqttTopicRoot;
                 SetMqttStatus("wird geprüft", MonitorState.Sending);
-                try { MqttPublisher.Publish(SystemMqtt.Host, SystemMqtt.Port, SystemMqtt.User, SystemMqtt.Password, topicRoot + "/Alarmfunktionen/Alarm", "{\"test\":true}"); SetMqttStatus("Online", MonitorState.Ok); }
-                catch (Exception ex) { ErrorLogger.Log("System-MQTT-Verbindungstest", ex); SetMqttStatus("Offline", MonitorState.Error); errors += "System-MQTT: " + ex.Message + "\r\n"; }
             }
             else SetMqttStatus("Offline", MonitorState.Disabled);
-            if (settings.SystemMqttReady && settings.BackupMqttConfigured)
+            if (settings.BackupMqttConfigured)
             {
-                try { MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, settings.BackupMqttTopicRoot + "/Alarmfunktionen/Alarm", "{\"test\":true}"); }
-                catch (Exception ex) { ErrorLogger.Log("Backup-MQTT-Verbindungstest", ex); errors += "Backup-MQTT: " + ex.Message + "\r\n"; }
+                SetBackupMqttStatus("wird geprüft", MonitorState.Sending);
+            }
+            else SetBackupMqttStatus("deaktiviert", MonitorState.Disabled);
+            if (settings.SystemMqttReady || settings.BackupMqttConfigured)
+            {
+                MqttRoutePublishResult mqtt = MqttRoutePublisher.Publish(settings, "Alarmfunktionen/Alarm", "{\"test\":true}", false);
+                if (settings.SystemMqttReady)
+                {
+                    if (mqtt.SystemSuccessful) SetMqttStatus("Online", MonitorState.Ok);
+                    else
+                    {
+                        SetMqttStatus("Offline", MonitorState.Error);
+                        if (!String.IsNullOrEmpty(mqtt.SystemError))
+                        {
+                            ErrorLogger.Log("System-MQTT-Verbindungstest", mqtt.SystemError);
+                            errors += "System-MQTT: " + mqtt.SystemError + "\r\n";
+                        }
+                    }
+                }
+                if (settings.BackupMqttConfigured)
+                {
+                    if (mqtt.BackupSuccessful) SetBackupMqttStatus("Online", MonitorState.Ok);
+                    else
+                    {
+                        SetBackupMqttStatus("Offline", MonitorState.Error);
+                        if (!String.IsNullOrEmpty(mqtt.BackupError))
+                        {
+                            ErrorLogger.Log("Backup-MQTT-Verbindungstest", mqtt.BackupError);
+                            errors += "Backup-MQTT: " + mqtt.BackupError + "\r\n";
+                        }
+                    }
+                }
             }
             if (settings.TcpEnabled)
             {
@@ -483,27 +517,20 @@ namespace MioneAlarmmelder.Forms
         private void TestAlarmClick(object sender, EventArgs e)
         {
             if (!ReadFields()) return;
-            if (!settings.SystemMqttReady && !settings.TcpEnabled) { MessageBox.Show("Bitte zuerst Firebase anmelden oder TCP aktivieren.", "Testfehler", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (!settings.SystemMqttReady && !settings.BackupMqttConfigured && !settings.TcpEnabled) { MessageBox.Show("Bitte zuerst System-, Backup-MQTT oder TCP aktivieren.", "Testfehler", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (TestAlarmRequested != null) TestAlarmRequested(this, EventArgs.Empty);
         }
 
         private bool ReadFirebaseConfig()
         {
-            settings.FirebaseApiKey = firebaseApiKeyBox.Text.Trim();
-            settings.FirebaseAuthDomain = firebaseAuthDomainBox.Text.Trim();
-            settings.FirebaseProjectId = firebaseProjectIdBox.Text.Trim();
+            settings.FirebaseApiKey = FirebaseDefaults.ApiKey;
+            settings.FirebaseAuthDomain = FirebaseDefaults.AuthDomain;
+            settings.FirebaseProjectId = FirebaseDefaults.ProjectId;
+            firebaseApiKeyBox.Text = settings.FirebaseApiKey;
+            firebaseAuthDomainBox.Text = settings.FirebaseAuthDomain;
+            firebaseProjectIdBox.Text = settings.FirebaseProjectId;
             settings.FirebaseEmail = firebaseEmailBox.Text.Trim();
             settings.FirebasePhoneNumber = firebasePhoneBox.Text.Trim();
-            if (String.IsNullOrEmpty(settings.FirebaseApiKey))
-            {
-                MessageBox.Show("Bitte zuerst den Firebase API Key im Tab User Login eintragen.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-            if (String.IsNullOrEmpty(settings.FirebaseProjectId))
-            {
-                MessageBox.Show("Bitte zuerst die Firebase Project ID im Tab User Login eintragen.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
             return true;
         }
 

@@ -34,6 +34,7 @@
     <Compile Include="Core\ExcelAlarmCatalog.cs" />
     <Compile Include="Core\FileMonitorService.cs" /><Compile Include="Core\PropertiesFile.cs" />
     <Compile Include="Core\FirebaseAuthSession.cs" />
+    <Compile Include="Core\FirebaseDefaults.cs" />
     <Compile Include="Core\FirebaseLoginPage.cs" />
     <Compile Include="Core\FirebaseAuthService.cs" />
     <Compile Include="Core\SettingsStore.cs" /><Compile Include="Core\StartupRegistration.cs" />

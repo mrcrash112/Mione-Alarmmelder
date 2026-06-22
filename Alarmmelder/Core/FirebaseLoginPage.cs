@@ -106,7 +106,7 @@ namespace MioneAlarmmelder.Core
             sb.AppendLine("document.getElementById('email').value = config.InitialEmail || '';");
             sb.AppendLine("document.getElementById('emailLink').value = config.InitialEmail || '';");
             sb.AppendLine("document.getElementById('phone').value = config.InitialPhone || '';");
-            sb.AppendLine("document.getElementById('configInfo').textContent = JSON.stringify(authConfig, null, 2);");
+            sb.AppendLine("document.getElementById('configInfo').textContent = JSON.stringify({ authDomain: authConfig.authDomain, projectId: authConfig.projectId }, null, 2);");
             sb.AppendLine("function status(text, kind){ const el=document.getElementById('status'); el.textContent=text; el.className='status ' + (kind || ''); }");
             sb.AppendLine("function providerIdFor(user){ try { if (user && user.providerData && user.providerData.length) return user.providerData[0].providerId || ''; } catch(e) {} return ''; }");
             sb.AppendLine("function refreshTokenFor(user){ try { if (user && user.refreshToken) return user.refreshToken; if (user && user.stsTokenManager && user.stsTokenManager.refreshToken) return user.stsTokenManager.refreshToken; } catch(e) {} return ''; }");

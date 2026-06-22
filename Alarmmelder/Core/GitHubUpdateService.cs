@@ -97,10 +97,10 @@ namespace MioneAlarmmelder.Core
             string assetName = Value(selected, "name");
             string versionText = beta ? ExtractVersionFromAsset(assetName) : tag;
             Version version = ParseVersion(versionText);
-            bool candidateBeta = versionText.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase) >= 0 || beta;
             UpdateCheckResult result = new UpdateCheckResult(); result.TagName = versionText; result.LatestVersion = version; result.Channel = beta ? "beta" : "stable";
             int compare = version.CompareTo(CurrentVersion);
-            result.HasUpdate = compare > 0 || (compare == 0 && CurrentIsBeta && !candidateBeta);
+            if (beta) result.HasUpdate = compare > 0 || (compare == 0 && !CurrentIsBeta);
+            else result.HasUpdate = compare > 0 || (compare == 0 && CurrentIsBeta);
             if (!result.HasUpdate) return result;
             result.AssetName = assetName; result.DownloadUrl = Value(selected, "browser_download_url"); result.Digest = Value(selected, "digest");
             result.IsZip = result.AssetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);

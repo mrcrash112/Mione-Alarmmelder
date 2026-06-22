@@ -20,8 +20,8 @@ namespace MioneAlarmmelder.Forms
         private TabPage overviewPage; private TabPage userLoginPage;
         private ComboBox alarmViewFilter, alarmPriorityFilter; private Button acknowledgeSelectedButton, acknowledgeAllButton; private NumericUpDown alarmLimitBox;
         private ListView errorList; private Button errorRefreshButton, errorClearButton, errorAcknowledgeSelectedButton, errorAcknowledgeAllButton; private Label errorPathLabel; private ComboBox errorViewFilter; private NumericUpDown errorLimitBox;
-        private Panel firebaseLedPanel; private Label firebaseStatusLabel, firebaseTopicRootLabel;
-        private TextBox firebaseApiKeyBox, firebaseAuthDomainBox, firebaseProjectIdBox, firebaseEmailBox, firebasePhoneBox, firebaseUidBox, firebaseDisplayNameBox, firebaseProviderBox;
+        private Panel firebaseLedPanel; private Label firebaseStatusLabel, firebaseTopicRootLabel, firebaseFixedConfigLabel;
+        private TextBox firebaseEmailBox, firebasePhoneBox, firebaseUidBox, firebaseDisplayNameBox, firebaseProviderBox;
         private Button firebasePasswordLoginButton, firebaseGoogleLoginButton, firebaseAppleLoginButton, firebaseSmsLoginButton, firebaseEmailCodeLoginButton, firebaseRefreshButton, firebaseSignOutButton;
 
         private void InitializeComponent()
@@ -60,16 +60,15 @@ namespace MioneAlarmmelder.Forms
             urgentTestAlarmButton = new Button(); urgentTestAlarmButton.Text = "Testalarm (urgent) senden"; urgentTestAlarmButton.Location = new Point(8, 42); urgentTestAlarmButton.Size = new Size(190, 28); urgentTestAlarmButton.BackColor = Color.MistyRose; urgentTestAlarmButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             alarmTools.Controls.Add(viewLabel); alarmTools.Controls.Add(alarmViewFilter); alarmTools.Controls.Add(priorityLabel); alarmTools.Controls.Add(alarmPriorityFilter); alarmTools.Controls.Add(alarmLimitLabel); alarmTools.Controls.Add(alarmLimitBox); alarmTools.Controls.Add(acknowledgeSelectedButton); alarmTools.Controls.Add(acknowledgeAllButton); alarmTools.Controls.Add(urgentTestAlarmButton);
             overviewPage.Controls.Add(alarmList); overviewPage.Controls.Add(alarmTools);
-            GroupBox firebaseConfig = new GroupBox(); firebaseConfig.Text = "Firebase-Konfiguration"; firebaseConfig.Location = new Point(15, 12); firebaseConfig.Size = new Size(385, 385);
-            firebaseApiKeyBox = AddField(firebaseConfig, "API Key (fest)", 58); firebaseApiKeyBox.ReadOnly = true;
-            firebaseAuthDomainBox = AddField(firebaseConfig, "Auth Domain (fest)", 92); firebaseAuthDomainBox.ReadOnly = true;
-            firebaseProjectIdBox = AddField(firebaseConfig, "Project ID (fest)", 126); firebaseProjectIdBox.ReadOnly = true;
-            firebaseEmailBox = AddField(firebaseConfig, "E-Mail", 160);
-            firebasePhoneBox = AddField(firebaseConfig, "Telefon", 194);
-            firebaseUidBox = AddField(firebaseConfig, "System-ID", 228); firebaseUidBox.ReadOnly = true;
-            firebaseDisplayNameBox = AddField(firebaseConfig, "Anzeigename", 262); firebaseDisplayNameBox.ReadOnly = true;
-            firebaseProviderBox = AddField(firebaseConfig, "Provider", 296); firebaseProviderBox.ReadOnly = true;
-            firebaseTopicRootLabel = new Label(); firebaseTopicRootLabel.Location = new Point(18, 332); firebaseTopicRootLabel.Size = new Size(350, 34); firebaseTopicRootLabel.Text = "MQTT-Top-Topic: <system-id>/...";
+            GroupBox firebaseConfig = new GroupBox(); firebaseConfig.Text = "Firebase-Informationen"; firebaseConfig.Location = new Point(15, 12); firebaseConfig.Size = new Size(385, 385);
+            firebaseFixedConfigLabel = new Label(); firebaseFixedConfigLabel.Location = new Point(18, 24); firebaseFixedConfigLabel.Size = new Size(350, 28); firebaseFixedConfigLabel.Text = "Konfiguration ist fest im Programm verdrahtet.";
+            firebaseEmailBox = AddField(firebaseConfig, "E-Mail", 58);
+            firebasePhoneBox = AddField(firebaseConfig, "Telefon", 92);
+            firebaseUidBox = AddField(firebaseConfig, "System-ID", 126); firebaseUidBox.ReadOnly = true;
+            firebaseDisplayNameBox = AddField(firebaseConfig, "Anzeigename", 160); firebaseDisplayNameBox.ReadOnly = true;
+            firebaseProviderBox = AddField(firebaseConfig, "Provider", 194); firebaseProviderBox.ReadOnly = true;
+            firebaseTopicRootLabel = new Label(); firebaseTopicRootLabel.Location = new Point(18, 238); firebaseTopicRootLabel.Size = new Size(350, 34); firebaseTopicRootLabel.Text = "MQTT-Top-Topic: <system-id>/...";
+            firebaseConfig.Controls.Add(firebaseFixedConfigLabel);
             firebaseConfig.Controls.Add(firebaseTopicRootLabel);
             userLoginPage.Controls.Add(firebaseConfig);
             GroupBox firebaseActions = new GroupBox(); firebaseActions.Text = "Login-Aktionen"; firebaseActions.Location = new Point(415, 12); firebaseActions.Size = new Size(385, 385);

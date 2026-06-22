@@ -351,12 +351,6 @@ namespace MioneAlarmmelder.Forms
 
         private void LoadFirebaseFields()
         {
-            settings.FirebaseApiKey = FirebaseDefaults.ApiKey;
-            settings.FirebaseAuthDomain = FirebaseDefaults.AuthDomain;
-            settings.FirebaseProjectId = FirebaseDefaults.ProjectId;
-            firebaseApiKeyBox.Text = settings.FirebaseApiKey;
-            firebaseAuthDomainBox.Text = settings.FirebaseAuthDomain;
-            firebaseProjectIdBox.Text = settings.FirebaseProjectId;
             firebaseEmailBox.Text = settings.FirebaseEmail;
             firebasePhoneBox.Text = settings.FirebasePhoneNumber;
             firebaseUidBox.Text = settings.FirebaseUid;
@@ -421,7 +415,6 @@ namespace MioneAlarmmelder.Forms
             settings.UpdateCheckMinutes = updateMinutes;
             if (!Int32.TryParse(dpProcessPollBox.Text, out dpProcessPoll) || dpProcessPoll < 5) { MessageBox.Show("Das Melkroboter-Prüfintervall muss mindestens 5 Sekunden betragen.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             settings.DpProcessEnabled = dpProcessEnabledBox.Checked; settings.DpProcessPath = dpProcessPathBox.Text.Trim(); settings.DpProcessPollSeconds = dpProcessPoll;
-            settings.FirebaseApiKey = firebaseApiKeyBox.Text.Trim(); settings.FirebaseAuthDomain = firebaseAuthDomainBox.Text.Trim(); settings.FirebaseProjectId = firebaseProjectIdBox.Text.Trim();
             settings.FirebaseEmail = firebaseEmailBox.Text.Trim(); settings.FirebasePhoneNumber = firebasePhoneBox.Text.Trim();
             if (settings.UpdateEnabled && settings.UpdateRepository.Length > 0 && settings.UpdateRepository.IndexOf('/') < 1) { MessageBox.Show("Das GitHub-Repository muss im Format Besitzer/Repository angegeben werden.", "Ungültige Updatequelle", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             if (settings.UpdateAssetName.Length == 0) settings.UpdateAssetName = "MioneAlarmmelder-*.zip"; return true;
@@ -521,14 +514,8 @@ namespace MioneAlarmmelder.Forms
             if (TestAlarmRequested != null) TestAlarmRequested(this, EventArgs.Empty);
         }
 
-        private bool ReadFirebaseConfig()
+        private bool ReadFirebaseContactFields()
         {
-            settings.FirebaseApiKey = FirebaseDefaults.ApiKey;
-            settings.FirebaseAuthDomain = FirebaseDefaults.AuthDomain;
-            settings.FirebaseProjectId = FirebaseDefaults.ProjectId;
-            firebaseApiKeyBox.Text = settings.FirebaseApiKey;
-            firebaseAuthDomainBox.Text = settings.FirebaseAuthDomain;
-            firebaseProjectIdBox.Text = settings.FirebaseProjectId;
             settings.FirebaseEmail = firebaseEmailBox.Text.Trim();
             settings.FirebasePhoneNumber = firebasePhoneBox.Text.Trim();
             return true;
@@ -536,7 +523,7 @@ namespace MioneAlarmmelder.Forms
 
         private void LaunchFirebaseLogin(string mode, string title)
         {
-            if (!ReadFirebaseConfig()) return;
+            if (!ReadFirebaseContactFields()) return;
             if (Interlocked.Exchange(ref firebaseLoginPending, 1) != 0)
             {
                 MessageBox.Show("Es läuft bereits eine Firebase-Anmeldung.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -588,7 +575,7 @@ namespace MioneAlarmmelder.Forms
 
         private void FirebaseRefreshClick(object sender, EventArgs e)
         {
-            if (!ReadFirebaseConfig()) return;
+            if (!ReadFirebaseContactFields()) return;
             if (!settings.HasFirebaseSession)
             {
                 MessageBox.Show(String.IsNullOrEmpty(settings.FirebaseUid) ? "Es ist noch keine Firebase-Session gespeichert." : "Die System-ID ist gespeichert, aber die Firebase-Session muss neu angemeldet werden.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Information);

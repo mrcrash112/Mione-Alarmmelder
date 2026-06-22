@@ -20,7 +20,7 @@ namespace MioneAlarmmelder.Forms
         private TabPage overviewPage; private TabPage userLoginPage;
         private ComboBox alarmViewFilter, alarmPriorityFilter; private Button acknowledgeSelectedButton, acknowledgeAllButton; private NumericUpDown alarmLimitBox;
         private ListView errorList; private Button errorRefreshButton, errorClearButton, errorAcknowledgeSelectedButton, errorAcknowledgeAllButton; private Label errorPathLabel; private ComboBox errorViewFilter; private NumericUpDown errorLimitBox;
-        private Panel firebaseLedPanel; private Label firebaseStatusLabel, firebaseTopicRootLabel, firebaseFixedConfigLabel;
+        private Panel firebaseLedPanel; private TextBox firebaseStatusBox; private Label firebaseFixedConfigLabel;
         private TextBox firebaseEmailBox, firebasePhoneBox, firebaseUidBox, firebaseDisplayNameBox, firebaseProviderBox;
         private Button firebasePasswordLoginButton, firebaseGoogleLoginButton, firebaseAppleLoginButton, firebaseSmsLoginButton, firebaseEmailCodeLoginButton, firebaseRefreshButton, firebaseSignOutButton;
 
@@ -67,15 +67,13 @@ namespace MioneAlarmmelder.Forms
             firebaseUidBox = AddField(firebaseConfig, "System-ID", 126); firebaseUidBox.ReadOnly = true;
             firebaseDisplayNameBox = AddField(firebaseConfig, "Anzeigename", 160); firebaseDisplayNameBox.ReadOnly = true;
             firebaseProviderBox = AddField(firebaseConfig, "Provider", 194); firebaseProviderBox.ReadOnly = true;
-            firebaseTopicRootLabel = new Label(); firebaseTopicRootLabel.Location = new Point(18, 238); firebaseTopicRootLabel.Size = new Size(350, 34); firebaseTopicRootLabel.Text = "MQTT-Top-Topic: <system-id>/...";
             firebaseConfig.Controls.Add(firebaseFixedConfigLabel);
-            firebaseConfig.Controls.Add(firebaseTopicRootLabel);
             userLoginPage.Controls.Add(firebaseConfig);
             GroupBox firebaseActions = new GroupBox(); firebaseActions.Text = "Login-Aktionen"; firebaseActions.Location = new Point(415, 12); firebaseActions.Size = new Size(385, 385);
             Label loginHint = new Label(); loginHint.Location = new Point(16, 24); loginHint.Size = new Size(350, 32); loginHint.Text = "Die Schaltflächen öffnen die lokale Firebase-Anmeldeseite im Browser.";
             firebaseLedPanel = new Panel(); firebaseLedPanel.Location = new Point(16, 182); firebaseLedPanel.Size = new Size(14, 14); firebaseLedPanel.BackColor = Color.Gray;
             Label firebaseStatusTitle = new Label(); firebaseStatusTitle.Location = new Point(38, 179); firebaseStatusTitle.Size = new Size(120, 20); firebaseStatusTitle.Text = "Sessionstatus";
-            firebaseStatusLabel = new Label(); firebaseStatusLabel.AutoSize = false; firebaseStatusLabel.TextAlign = ContentAlignment.TopLeft;
+            firebaseStatusBox = new TextBox(); firebaseStatusBox.Location = new Point(16, 204); firebaseStatusBox.Size = new Size(350, 150); firebaseStatusBox.Multiline = true; firebaseStatusBox.ReadOnly = true; firebaseStatusBox.ScrollBars = ScrollBars.Vertical; firebaseStatusBox.BorderStyle = BorderStyle.FixedSingle; firebaseStatusBox.BackColor = Color.White; firebaseStatusBox.TabStop = false;
             firebasePasswordLoginButton = new Button(); firebasePasswordLoginButton.Text = "E-Mail / Passwort"; firebasePasswordLoginButton.Location = new Point(16, 62); firebasePasswordLoginButton.Size = new Size(110, 30);
             firebaseGoogleLoginButton = new Button(); firebaseGoogleLoginButton.Text = "Google"; firebaseGoogleLoginButton.Location = new Point(136, 62); firebaseGoogleLoginButton.Size = new Size(110, 30);
             firebaseAppleLoginButton = new Button(); firebaseAppleLoginButton.Text = "Apple"; firebaseAppleLoginButton.Location = new Point(256, 62); firebaseAppleLoginButton.Size = new Size(110, 30);
@@ -83,8 +81,8 @@ namespace MioneAlarmmelder.Forms
             firebaseEmailCodeLoginButton = new Button(); firebaseEmailCodeLoginButton.Text = "E-Mail & Code"; firebaseEmailCodeLoginButton.Location = new Point(136, 100); firebaseEmailCodeLoginButton.Size = new Size(110, 30);
             firebaseRefreshButton = new Button(); firebaseRefreshButton.Text = "Token erneuern"; firebaseRefreshButton.Location = new Point(256, 100); firebaseRefreshButton.Size = new Size(110, 30);
             firebaseSignOutButton = new Button(); firebaseSignOutButton.Text = "Abmelden"; firebaseSignOutButton.Location = new Point(16, 138); firebaseSignOutButton.Size = new Size(110, 30);
-            firebaseStatusLabel.Location = new Point(16, 184); firebaseStatusLabel.Size = new Size(350, 170); firebaseStatusLabel.Text = "Keine aktive Firebase-Session.";
-            firebaseActions.Controls.Add(loginHint); firebaseActions.Controls.Add(firebaseLedPanel); firebaseActions.Controls.Add(firebaseStatusTitle); firebaseActions.Controls.Add(firebasePasswordLoginButton); firebaseActions.Controls.Add(firebaseGoogleLoginButton); firebaseActions.Controls.Add(firebaseAppleLoginButton); firebaseActions.Controls.Add(firebaseSmsLoginButton); firebaseActions.Controls.Add(firebaseEmailCodeLoginButton); firebaseActions.Controls.Add(firebaseRefreshButton); firebaseActions.Controls.Add(firebaseSignOutButton); firebaseActions.Controls.Add(firebaseStatusLabel);
+            firebaseStatusBox.Text = "Keine aktive Firebase-Session.";
+            firebaseActions.Controls.Add(loginHint); firebaseActions.Controls.Add(firebaseLedPanel); firebaseActions.Controls.Add(firebaseStatusTitle); firebaseActions.Controls.Add(firebasePasswordLoginButton); firebaseActions.Controls.Add(firebaseGoogleLoginButton); firebaseActions.Controls.Add(firebaseAppleLoginButton); firebaseActions.Controls.Add(firebaseSmsLoginButton); firebaseActions.Controls.Add(firebaseEmailCodeLoginButton); firebaseActions.Controls.Add(firebaseRefreshButton); firebaseActions.Controls.Add(firebaseSignOutButton); firebaseActions.Controls.Add(firebaseStatusBox);
             userLoginPage.Controls.Add(firebaseActions);
             messagePathBox = AddPath(paths, "Alarmdatei", 24); alarmSettingsPathBox = AddPath(paths, "Alarm-Einstellungen", 78);
             priorityPathBox = AddPath(paths, "Alarm-Prioritäten", 132); translationPathBox = AddPath(paths, "Übersetzungen", 186);

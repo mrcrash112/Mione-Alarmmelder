@@ -346,7 +346,7 @@ namespace MioneAlarmmelder.Forms
         {
             if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { SetFirebaseStatus(text, state); }); return; }
             firebaseLedPanel.BackColor = StateColor(state);
-            firebaseStatusLabel.Text = text;
+            firebaseStatusBox.Text = text;
         }
 
         private void LoadFirebaseFields()
@@ -357,7 +357,6 @@ namespace MioneAlarmmelder.Forms
             firebaseDisplayNameBox.Text = settings.FirebaseDisplayName;
             firebaseProviderBox.Text = settings.FirebaseProviderId;
             string topicRoot = String.IsNullOrEmpty(settings.MqttTopicRoot) ? "<system-id>" : settings.MqttTopicRoot;
-            firebaseTopicRootLabel.Text = "MQTT-Top-Topic: " + topicRoot + "/...";
             dpProcessTopicLabel.Text = "MQTT-Topic: " + topicRoot + "/Melkroboter";
             FirebaseAuthSession activeSession = firebaseAuthService == null ? null : firebaseAuthService.CurrentSession;
             if (activeSession != null) SetFirebaseStatus("Session aktiv\r\n" + BuildFirebaseSessionSummary(activeSession), MonitorState.Ok);

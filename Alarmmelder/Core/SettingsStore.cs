@@ -10,6 +10,7 @@ namespace MioneAlarmmelder.Core
     {
         private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MioneAlarmmelder");
         private static readonly string FileName = Path.Combine(Folder, "settings.xml");
+        private static readonly object SyncRoot = new object();
 
         public static AppSettings Load()
         {
@@ -27,6 +28,15 @@ namespace MioneAlarmmelder.Core
                 s.MqttPort = GetInt(d, "MqttPort", 1883);
                 s.MqttUser = Get(d, "MqttUser", ""); s.MqttPassword = Unprotect(Get(d, "MqttPassword", ""));
                 s.ModemImei = Get(d, "ModemImei", Get(d, "ModemSerialNumber", ""));
+                s.FirebaseApiKey = Get(d, "FirebaseApiKey", "");
+                s.FirebaseAuthDomain = Get(d, "FirebaseAuthDomain", "");
+                s.FirebaseProjectId = Get(d, "FirebaseProjectId", "");
+                s.FirebaseUid = Get(d, "FirebaseUid", "");
+                s.FirebaseEmail = Get(d, "FirebaseEmail", "");
+                s.FirebaseDisplayName = Get(d, "FirebaseDisplayName", "");
+                s.FirebaseProviderId = Get(d, "FirebaseProviderId", "");
+                s.FirebasePhoneNumber = Get(d, "FirebasePhoneNumber", "");
+                s.FirebaseRefreshToken = Unprotect(Get(d, "FirebaseRefreshToken", ""));
                 s.TcpEnabled = GetBool(d, "TcpEnabled", false); s.TcpHost = Get(d, "TcpHost", "");
                 s.TcpPort = GetInt(d, "TcpPort", 5000);
                 s.ShowAlarmProgress = GetBool(d, "ShowAlarmProgress", true);
@@ -49,32 +59,44 @@ namespace MioneAlarmmelder.Core
 
         public static void Save(AppSettings s)
         {
-            if (!Directory.Exists(Folder)) Directory.CreateDirectory(Folder);
-            XmlWriterSettings ws = new XmlWriterSettings(); ws.Indent = true; ws.Encoding = Encoding.UTF8;
-            using (XmlWriter w = XmlWriter.Create(FileName, ws))
+            lock (SyncRoot)
             {
-                w.WriteStartElement("settings");
-                Write(w, "MessageLogPath", s.MessageLogPath); Write(w, "AlarmSettingsPath", s.AlarmSettingsPath);
-                Write(w, "PriorityPath", s.PriorityPath); Write(w, "TranslationPath", s.TranslationPath);
-                Write(w, "AlarmCatalogPath", s.AlarmCatalogPath);
-                Write(w, "MqttEnabled", s.MqttEnabled.ToString()); Write(w, "MqttHost", s.MqttHost);
-                Write(w, "MqttPort", s.MqttPort.ToString());
-                Write(w, "MqttUser", s.MqttUser); Write(w, "MqttPassword", Protect(s.MqttPassword));
-                Write(w, "ModemImei", s.ModemImei);
-                Write(w, "TcpEnabled", s.TcpEnabled.ToString()); Write(w, "TcpHost", s.TcpHost);
-                Write(w, "TcpPort", s.TcpPort.ToString());
-                Write(w, "ShowAlarmProgress", s.ShowAlarmProgress.ToString());
-                Write(w, "PollSeconds", s.PollSeconds.ToString());
-                Write(w, "StartWithWindows", s.StartWithWindows.ToString());
-                Write(w, "UpdateEnabled", s.UpdateEnabled.ToString()); Write(w, "UpdateRepository", s.UpdateRepository);
-                Write(w, "UpdateAssetName", s.UpdateAssetName);
-                Write(w, "UpdateChannel", s.UpdateChannel);
-                Write(w, "UpdateCheckMinutes", s.UpdateCheckMinutes.ToString());
-                Write(w, "AlarmHistoryLimit", s.AlarmHistoryLimit.ToString()); Write(w, "ErrorHistoryLimit", s.ErrorHistoryLimit.ToString());
-                Write(w, "DpProcessEnabled", s.DpProcessEnabled.ToString());
-                Write(w, "DpProcessPath", s.DpProcessPath);
-                Write(w, "DpProcessPollSeconds", s.DpProcessPollSeconds.ToString());
-                w.WriteEndElement();
+                if (!Directory.Exists(Folder)) Directory.CreateDirectory(Folder);
+                XmlWriterSettings ws = new XmlWriterSettings(); ws.Indent = true; ws.Encoding = Encoding.UTF8;
+                using (XmlWriter w = XmlWriter.Create(FileName, ws))
+                {
+                    w.WriteStartElement("settings");
+                    Write(w, "MessageLogPath", s.MessageLogPath); Write(w, "AlarmSettingsPath", s.AlarmSettingsPath);
+                    Write(w, "PriorityPath", s.PriorityPath); Write(w, "TranslationPath", s.TranslationPath);
+                    Write(w, "AlarmCatalogPath", s.AlarmCatalogPath);
+                    Write(w, "MqttEnabled", s.MqttEnabled.ToString()); Write(w, "MqttHost", s.MqttHost);
+                    Write(w, "MqttPort", s.MqttPort.ToString());
+                    Write(w, "MqttUser", s.MqttUser); Write(w, "MqttPassword", Protect(s.MqttPassword));
+                    Write(w, "ModemImei", s.ModemImei);
+                    Write(w, "FirebaseApiKey", s.FirebaseApiKey);
+                    Write(w, "FirebaseAuthDomain", s.FirebaseAuthDomain);
+                    Write(w, "FirebaseProjectId", s.FirebaseProjectId);
+                    Write(w, "FirebaseUid", s.FirebaseUid);
+                    Write(w, "FirebaseEmail", s.FirebaseEmail);
+                    Write(w, "FirebaseDisplayName", s.FirebaseDisplayName);
+                    Write(w, "FirebaseProviderId", s.FirebaseProviderId);
+                    Write(w, "FirebasePhoneNumber", s.FirebasePhoneNumber);
+                    Write(w, "FirebaseRefreshToken", Protect(s.FirebaseRefreshToken));
+                    Write(w, "TcpEnabled", s.TcpEnabled.ToString()); Write(w, "TcpHost", s.TcpHost);
+                    Write(w, "TcpPort", s.TcpPort.ToString());
+                    Write(w, "ShowAlarmProgress", s.ShowAlarmProgress.ToString());
+                    Write(w, "PollSeconds", s.PollSeconds.ToString());
+                    Write(w, "StartWithWindows", s.StartWithWindows.ToString());
+                    Write(w, "UpdateEnabled", s.UpdateEnabled.ToString()); Write(w, "UpdateRepository", s.UpdateRepository);
+                    Write(w, "UpdateAssetName", s.UpdateAssetName);
+                    Write(w, "UpdateChannel", s.UpdateChannel);
+                    Write(w, "UpdateCheckMinutes", s.UpdateCheckMinutes.ToString());
+                    Write(w, "AlarmHistoryLimit", s.AlarmHistoryLimit.ToString()); Write(w, "ErrorHistoryLimit", s.ErrorHistoryLimit.ToString());
+                    Write(w, "DpProcessEnabled", s.DpProcessEnabled.ToString());
+                    Write(w, "DpProcessPath", s.DpProcessPath);
+                    Write(w, "DpProcessPollSeconds", s.DpProcessPollSeconds.ToString());
+                    w.WriteEndElement();
+                }
             }
         }
 

@@ -19,7 +19,7 @@ namespace MioneAlarmmelder.Transport
 
         public void Start()
         {
-            if (worker != null || !settings.MqttEnabled) return;
+            if (worker != null || !settings.SystemMqttReady) return;
             worker = new Thread(Run); worker.IsBackground = true; worker.Name = "MQTT Alarmstatus"; worker.Start();
         }
 
@@ -35,7 +35,7 @@ namespace MioneAlarmmelder.Transport
 
         private void Listen()
         {
-            using (TcpClient client = TcpPublisher.Connect(settings.MqttHost, settings.MqttPort, 5000))
+            using (TcpClient client = TcpPublisher.Connect(SystemMqtt.Host, SystemMqtt.Port, 5000))
             using (NetworkStream stream = client.GetStream())
             {
                 activeClient = client; client.ReceiveTimeout = 5000; client.SendTimeout = 5000;
@@ -87,12 +87,12 @@ namespace MioneAlarmmelder.Transport
         private void SendConnect(Stream stream)
         {
             MemoryStream body = new MemoryStream(); WriteString(body, "MQTT"); body.WriteByte(4);
-            byte flags = 2; if (!String.IsNullOrEmpty(settings.MqttUser) || !String.IsNullOrEmpty(settings.MqttPassword)) flags |= 0x80;
-            if (!String.IsNullOrEmpty(settings.MqttPassword)) flags |= 0x40;
+            byte flags = 2; if (!String.IsNullOrEmpty(SystemMqtt.User) || !String.IsNullOrEmpty(SystemMqtt.Password)) flags |= 0x80;
+            if (!String.IsNullOrEmpty(SystemMqtt.Password)) flags |= 0x40;
             body.WriteByte(flags); body.WriteByte(0); body.WriteByte(60);
             WriteString(body, "Mione-Status-" + Guid.NewGuid().ToString("N").Substring(0, 8));
-            if (!String.IsNullOrEmpty(settings.MqttUser) || !String.IsNullOrEmpty(settings.MqttPassword)) WriteString(body, settings.MqttUser);
-            if (!String.IsNullOrEmpty(settings.MqttPassword)) WriteString(body, settings.MqttPassword);
+            if (!String.IsNullOrEmpty(SystemMqtt.User) || !String.IsNullOrEmpty(SystemMqtt.Password)) WriteString(body, SystemMqtt.User);
+            if (!String.IsNullOrEmpty(SystemMqtt.Password)) WriteString(body, SystemMqtt.Password);
             SendPacket(stream, 0x10, body.ToArray());
         }
 
@@ -105,9 +105,9 @@ namespace MioneAlarmmelder.Transport
 
         private string Topic(string subTopic)
         {
-            string user = (settings.MqttUser ?? "").Trim().Trim('/');
-            if (user.Length == 0) throw new InvalidOperationException("MQTT-Benutzername/Top-Topic fehlt.");
-            return user + "/" + subTopic.TrimStart('/');
+            string root = settings.SystemMqttTopicRoot;
+            if (root.Length == 0) throw new InvalidOperationException("Firebase Login fehlt. Das MQTT-Top-Topic ist noch nicht verfügbar.");
+            return root + "/" + subTopic.TrimStart('/');
         }
 
         private static void ReadPacket(Stream stream, out byte header, out byte[] body)

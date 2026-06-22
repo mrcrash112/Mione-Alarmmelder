@@ -62,13 +62,10 @@ namespace MioneAlarmmelder.Transport
 
         public void Publish()
         {
-            if (!settings.DpProcessEnabled || !settings.MqttEnabled || String.IsNullOrEmpty(settings.MqttUser)) return;
-            string topic = settings.MqttUser.Trim().Trim('/') + "/Melkroboter";
-            string functionsTopic = topic + "/Funktionen";
-            string boxesTopic = topic + "/Boxen";
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, topic, BuildSnapshotJson(), true);
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, boxesTopic, BuildBoxesJson(), true);
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, functionsTopic, BuildFunctionsJson(), true);
+            if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
+            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(), true);
+            MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(), true);
+            MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
         private string BuildSnapshotJson()
@@ -115,8 +112,8 @@ namespace MioneAlarmmelder.Transport
             b.Append('{');
             Add(b, "type", "melkroboterFunctions"); b.Append(',');
             Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
-            Add(b, "commandTopic", "<mqtt_benutzername>/Melkroboter/Command"); b.Append(',');
-            Add(b, "resultTopic", "<mqtt_benutzername>/Melkroboter/Result"); b.Append(',');
+            Add(b, "commandTopic", "<firebase_system_id>/Melkroboter/Command"); b.Append(',');
+            Add(b, "resultTopic", "<firebase_system_id>/Melkroboter/Result"); b.Append(',');
             Add(b, "commandExample", "{\"requestId\":\"1\",\"command\":\"stopMilking\",\"boxNumber\":1}"); b.Append(',');
             AppendFunctions(b);
             b.Append('}');

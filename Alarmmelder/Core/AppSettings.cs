@@ -5,6 +5,11 @@ namespace MioneAlarmmelder.Core
 {
     public sealed class AppSettings
     {
+        public const string SystemMqttHost = "194.164.51.139";
+        public const int SystemMqttPort = 1883;
+        public const string SystemMqttUser = "mqtt_master_key";
+        public const string SystemMqttPassword = "dyjpaz-xakfip-1guwdI";
+
         public string MessageLogPath { get; set; }
         public string AlarmSettingsPath { get; set; }
         public string PriorityPath { get; set; }
@@ -16,6 +21,15 @@ namespace MioneAlarmmelder.Core
         public string MqttUser { get; set; }
         public string MqttPassword { get; set; }
         public string ModemImei { get; set; }
+        public string FirebaseApiKey { get; set; }
+        public string FirebaseAuthDomain { get; set; }
+        public string FirebaseProjectId { get; set; }
+        public string FirebaseUid { get; set; }
+        public string FirebaseEmail { get; set; }
+        public string FirebaseDisplayName { get; set; }
+        public string FirebaseProviderId { get; set; }
+        public string FirebasePhoneNumber { get; set; }
+        public string FirebaseRefreshToken { get; set; }
         public bool TcpEnabled { get; set; }
         public string TcpHost { get; set; }
         public int TcpPort { get; set; }
@@ -43,12 +57,26 @@ namespace MioneAlarmmelder.Core
                 TranslationPath = @"D:\Release\Assets\translations_de.properties",
                 AlarmCatalogPath = @"D:\Release\Assets\Mione_AlarmCodes_UK_DE.xlsx",
                 MqttHost = "", MqttPort = 1883, ModemImei = "",
+                FirebaseApiKey = "", FirebaseAuthDomain = "", FirebaseProjectId = "", FirebaseUid = "", FirebaseEmail = "",
+                FirebaseDisplayName = "", FirebaseProviderId = "", FirebasePhoneNumber = "", FirebaseRefreshToken = "",
                 TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
                 UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateChannel = "stable", UpdateCheckMinutes = 60,
                 AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500,
                 DpProcessEnabled = false, DpProcessPath = @"D:\DairyPln", DpProcessPollSeconds = 30
             };
         }
+
+        public bool HasFirebaseSession { get { return !String.IsNullOrEmpty(FirebaseUid) && !String.IsNullOrEmpty(FirebaseRefreshToken); } }
+        public bool SystemMqttReady { get { return !String.IsNullOrEmpty(FirebaseUid); } }
+        public bool MqttReady { get { return SystemMqttReady; } }
+        public string MqttTopicRoot { get { return SystemMqttTopicRoot; } }
+        public string SystemMqttTopicRoot { get { return (FirebaseUid ?? String.Empty).Trim().Trim('/'); } }
+        public string BackupMqttTopicRoot { get { return (MqttUser ?? String.Empty).Trim().Trim('/'); } }
+        public bool BackupMqttConfigured
+        {
+            get { return MqttEnabled && !String.IsNullOrEmpty(MqttHost) && !String.IsNullOrEmpty(BackupMqttTopicRoot); }
+        }
+        public bool HasAnyMqttTransport { get { return SystemMqttReady || BackupMqttConfigured; } }
 
         public string[] MissingFiles()
         {

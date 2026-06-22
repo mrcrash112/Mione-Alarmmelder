@@ -9,15 +9,16 @@ namespace MioneAlarmmelder
 {
     public sealed class AlarmApplicationContext : ApplicationContext
     {
-        private AppSettings settings; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher; private MilkingRobotPublisher milkingRobotPublisher;
+        private AppSettings settings; private FirebaseAuthService firebaseAuthService; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher; private MilkingRobotPublisher milkingRobotPublisher;
         private MilkingRobotCommandSubscriber milkingRobotCommandSubscriber;
         private MqttProgressSubscriber mqttProgressSubscriber;
-        private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending;
+        private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer, firebaseRefreshTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending, firebaseRefreshPending;
         private string notifiedUpdateTag = "";
         private bool heartbeatValue, mqttModemActive;
         private DateTime lastModemStatusUtc = DateTime.MinValue;
         private bool modemStatusTimedOut;
         private const int ModemStatusTimeoutSeconds = 60;
+        private const int FirebaseRefreshIntervalMinutes = 30;
 
         public AlarmApplicationContext()
         {
@@ -28,19 +29,23 @@ namespace MioneAlarmmelder
                 using (PathSettingsForm paths = new PathSettingsForm(settings))
                 { if (paths.ShowDialog() != DialogResult.OK) { MessageBox.Show("Die Überwachung kann erst mit gültigen Dateipfaden starten.", "Mione Alarmmelder", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
             }
-            main = new MainForm(settings); MainForm = main; main.FormClosed += delegate { Stop(); ExitThread(); };
+            firebaseAuthService = new FirebaseAuthService(settings);
+            main = new MainForm(settings, firebaseAuthService); MainForm = main; main.FormClosed += delegate { Stop(); ExitThread(); };
             main.SettingsSaved += delegate { Restart(); };
             main.UpdateCheckRequested += delegate { CheckForUpdates(true); };
             main.TestAlarmRequested += delegate { SendTestAlarm(); };
             main.UrgentTestAlarmRequested += delegate { SendUrgentTestAlarm(); };
-            main.Show(); Start(); ScheduleUpdateCheck();
+            main.Show();
+            RestoreFirebaseSession();
+            StartFirebaseRefreshTimer();
+            Start(); ScheduleUpdateCheck();
         }
 
         private void Start()
         {
             if (settings.MissingFiles().Length > 0) { main.SetStatus("Dateipfade unvollständig", MonitorState.Error); return; }
             dispatcher = new AlarmDispatcher(settings); dispatcher.Completed += DispatchCompleted; dispatcher.HeartbeatCompleted += HeartbeatCompleted; dispatcher.MobileConfigCompleted += MobileConfigCompleted; dispatcher.ProgressReceived += AlarmProgressReceived;
-            if (settings.MqttEnabled)
+            if (settings.SystemMqttReady)
             {
                 mqttProgressSubscriber = new MqttProgressSubscriber(settings);
                 mqttProgressSubscriber.ProgressReceived += AlarmProgressReceived;
@@ -50,10 +55,13 @@ namespace MioneAlarmmelder
             try
             {
                 monitor.Start(); main.SetPhones(monitor.GetMobileConfigurations()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
-                main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.MqttEnabled ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.MqttEnabled ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.MqttEnabled ? MonitorState.Waiting : MonitorState.Disabled);
+                main.SetMqttStatus(settings.SystemMqttReady ? "Online" : "Offline", settings.SystemMqttReady ? MonitorState.Ok : MonitorState.Disabled);
+                main.SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
+                main.SetModemStatus(settings.TcpEnabled ? "Socket" : settings.SystemMqttReady ? "MQTT" : "", settings.TcpEnabled ? "wird geprüft" : settings.SystemMqttReady ? "warte auf Rückmeldung" : "deaktiviert", settings.TcpEnabled || settings.SystemMqttReady ? MonitorState.Waiting : MonitorState.Disabled);
+                main.SetFirmwareStatus(settings.TcpEnabled || settings.SystemMqttReady ? "warte auf Status" : "deaktiviert", settings.TcpEnabled || settings.SystemMqttReady ? MonitorState.Waiting : MonitorState.Disabled);
                 lastModemStatusUtc = DateTime.UtcNow;
-                heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
-                if (settings.DpProcessEnabled && settings.MqttEnabled)
+                if (settings.SystemMqttReady || settings.TcpEnabled) heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
+                if (settings.DpProcessEnabled && settings.SystemMqttReady)
                 {
                     milkingRobotPublisher = new MilkingRobotPublisher(settings);
                     milkingRobotCommandSubscriber = new MilkingRobotCommandSubscriber(settings);
@@ -66,16 +74,18 @@ namespace MioneAlarmmelder
             catch (Exception ex) { ErrorLogger.Log("Dateiüberwachung", ex); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
 
-        private void Restart() { Stop(); settings = SettingsStore.Load(); Start(); ScheduleUpdateCheck(); }
+        private void Restart() { Stop(); StartFirebaseRefreshTimer(); Start(); ScheduleUpdateCheck(); }
         private void Stop()
         {
             if (heartbeatTimer != null) { heartbeatTimer.Dispose(); heartbeatTimer = null; }
             if (updateTimer != null) { updateTimer.Dispose(); updateTimer = null; }
             if (milkingRobotTimer != null) { milkingRobotTimer.Dispose(); milkingRobotTimer = null; }
+            if (firebaseRefreshTimer != null) { firebaseRefreshTimer.Dispose(); firebaseRefreshTimer = null; }
             if (milkingRobotCommandSubscriber != null) { milkingRobotCommandSubscriber.Dispose(); milkingRobotCommandSubscriber = null; }
             if (mqttProgressSubscriber != null) { mqttProgressSubscriber.Dispose(); mqttProgressSubscriber = null; }
             Interlocked.Exchange(ref heartbeatPending, 0);
             Interlocked.Exchange(ref milkingRobotPending, 0);
+            Interlocked.Exchange(ref firebaseRefreshPending, 0);
             heartbeatValue = false;
             milkingRobotPublisher = null;
             mqttModemActive = false;
@@ -116,7 +126,6 @@ namespace MioneAlarmmelder
         private void AlarmFound(object sender, AlarmEventArgs e)
         {
             main.AddAlarm(e.Alarm); main.SetStatus("Alarm " + e.Alarm.Code + " wird versendet", MonitorState.Sending);
-            if (settings.MqttEnabled) main.SetMqttStatus("sendet Alarm " + e.Alarm.Code, MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Alarm " + e.Alarm.Code, MonitorState.Sending);
             if (dispatcher != null) dispatcher.Dispatch(e.Alarm);
         }
@@ -129,7 +138,6 @@ namespace MioneAlarmmelder
                 Location = "Test", CowNumber = "0", Priority = "technical", ClearText = "Dies ist ein Testfehler zur Prüfung der Alarmübertragung."
             };
             main.AddAlarm(alarm); main.SetStatus("Testfehler wird versendet", MonitorState.Sending);
-            if (settings.MqttEnabled) main.SetMqttStatus("sendet Testfehler", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Testfehler", MonitorState.Sending);
             dispatcher.Dispatch(alarm);
         }
@@ -144,13 +152,12 @@ namespace MioneAlarmmelder
                 ClearText = "Testalarm vom " + now.ToString("dd.MM.yyyy") + " um " + now.ToString("HH:mm:ss") + " Uhr zur Prüfung der Alarmierung."
             };
             main.AddAlarm(alarm); main.SetStatus("Testalarm (urgent) wird versendet", MonitorState.Sending);
-            if (settings.MqttEnabled) main.SetMqttStatus("sendet Testalarm (urgent)", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("sendet Testalarm (urgent)", MonitorState.Sending);
             dispatcher.Dispatch(alarm);
         }
         private void DispatchCompleted(object sender, DispatchResultEventArgs e)
         {
-            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Versand erfolgreich" : "Fehler") : "deaktiviert",
+            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Online" : "Offline") : "Offline",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Versand erfolgreich" : "Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
@@ -159,23 +166,22 @@ namespace MioneAlarmmelder
         }
         private void HeartbeatTick(object state)
         {
-            if (dispatcher == null || (!settings.MqttEnabled && !settings.TcpEnabled)) return;
+            if (dispatcher == null || (!settings.SystemMqttReady && !settings.TcpEnabled)) return;
             CheckModemStatusTimeout();
             if (Interlocked.Exchange(ref heartbeatPending, 1) != 0) return;
-            if (settings.MqttEnabled) main.SetMqttStatus("Heartbeat wird gesendet", MonitorState.Sending);
             if (settings.TcpEnabled) main.SetTcpStatus("Heartbeat wird gesendet", MonitorState.Sending);
             heartbeatValue = !heartbeatValue; dispatcher.DispatchHeartbeat(heartbeatValue);
-            if (monitor != null && (settings.MqttEnabled || settings.TcpEnabled)) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
+            if (monitor != null && (settings.SystemMqttReady || settings.TcpEnabled)) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
         }
         private void HeartbeatCompleted(object sender, DispatchResultEventArgs e)
         {
             Interlocked.Exchange(ref heartbeatPending, 0);
-            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
+            main.SetMqttStatus(e.MqttEnabled ? (e.MqttSuccessful ? "Online" : "Offline") : "Offline",
                 e.MqttEnabled ? (e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             main.SetTcpStatus(e.TcpEnabled ? (e.TcpSuccessful ? "Heartbeat OK" : "Heartbeat-Fehler") : "deaktiviert",
                 e.TcpEnabled ? (e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error) : MonitorState.Disabled);
             if (e.TcpEnabled && !e.TcpSuccessful) main.SetModemStatus("Socket", "nicht erreichbar", MonitorState.Error);
-            else if (e.MqttEnabled && !e.MqttSuccessful) main.SetModemStatus("MQTT", "Verbindung fehlerhaft", MonitorState.Error);
+            else if (e.MqttEnabled && !e.MqttSuccessful) main.SetModemStatus("MQTT", settings.SystemMqttReady ? "Offline" : "deaktiviert", MonitorState.Error);
             else if (e.MqttEnabled)
             {
                 bool fresh = DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= ModemStatusTimeoutSeconds;
@@ -189,7 +195,7 @@ namespace MioneAlarmmelder
         {
             if (lastModemStatusUtc == DateTime.MinValue || DateTime.UtcNow.Subtract(lastModemStatusUtc).TotalSeconds <= ModemStatusTimeoutSeconds) return;
             mqttModemActive = false;
-            main.SetModemStatus(settings.TcpEnabled ? "Socket" : "MQTT", "keine Rückmeldung seit 60 Sekunden", MonitorState.Error);
+            main.SetModemStatus(settings.TcpEnabled ? "Socket" : "MQTT", settings.SystemMqttReady ? "keine Rückmeldung seit 60 Sekunden" : "deaktiviert", MonitorState.Error);
             if (!modemStatusTimedOut)
             {
                 modemStatusTimedOut = true;
@@ -198,7 +204,7 @@ namespace MioneAlarmmelder
         }
         private void MobileConfigCompleted(object sender, DispatchResultEventArgs e)
         {
-            if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
+            if (e.MqttEnabled) main.SetMqttStatus(e.MqttSuccessful ? "Online" : "Offline", e.MqttSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
         }
@@ -220,6 +226,56 @@ namespace MioneAlarmmelder
         {
             if (!settings.UpdateEnabled || String.IsNullOrEmpty(settings.UpdateRepository)) return;
             updateTimer = new System.Threading.Timer(delegate { CheckForUpdates(false); }, null, 8000, Math.Max(5, settings.UpdateCheckMinutes) * 60000);
+        }
+        private void StartFirebaseRefreshTimer()
+        {
+            if (firebaseRefreshTimer != null) { firebaseRefreshTimer.Dispose(); firebaseRefreshTimer = null; }
+            firebaseRefreshTimer = new System.Threading.Timer(FirebaseRefreshTick, null, FirebaseRefreshIntervalMinutes * 60000, FirebaseRefreshIntervalMinutes * 60000);
+        }
+        private void FirebaseRefreshTick(object state)
+        {
+            if (firebaseAuthService == null || !settings.HasFirebaseSession) return;
+            if (Interlocked.Exchange(ref firebaseRefreshPending, 1) != 0) return;
+            try
+            {
+                FirebaseAuthSession session = firebaseAuthService.RefreshSession();
+                if (session != null)
+                {
+                    main.RefreshFirebaseFields();
+                    main.SetFirebaseStatus("Firebase-Session erneuert.", MonitorState.Ok);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorLogger.Log("Firebase-Token-Refresh", ex);
+                firebaseAuthService.InvalidateCurrentSession();
+                main.RefreshFirebaseFields();
+                main.SetFirebaseStatus("Firebase-Session konnte nicht erneuert werden: " + ex.Message, MonitorState.Error);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref firebaseRefreshPending, 0);
+            }
+        }
+        private void RestoreFirebaseSession()
+        {
+            if (firebaseAuthService == null)
+            {
+                main.SetFirebaseStatus("Firebase-Login ist nicht initialisiert.", MonitorState.Error);
+                return;
+            }
+            try
+            {
+                FirebaseAuthSession session = settings.HasFirebaseSession ? firebaseAuthService.RestoreSession() : null;
+                main.RefreshFirebaseFields();
+                if (session != null) main.SetFirebaseStatus("Firebase-Session wiederhergestellt.", MonitorState.Ok);
+            }
+            catch (Exception ex)
+            {
+                ErrorLogger.Log("Firebase-Login", ex);
+                main.RefreshFirebaseFields();
+                main.SetFirebaseStatus("Firebase-Session konnte nicht geladen werden.", MonitorState.Error);
+            }
         }
         private void CheckForUpdates(bool manual)
         {

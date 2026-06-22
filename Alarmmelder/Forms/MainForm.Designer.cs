@@ -17,9 +17,12 @@ namespace MioneAlarmmelder.Forms
         private Label updateStatusLabel; private Button updateCheckButton;
         private CheckBox dpProcessEnabledBox; private TextBox dpProcessPathBox, dpProcessPollBox; private Button dpProcessCheckButton; private ListView dpProcessFileList; private Label dpProcessTopicLabel;
         private ListView robotCommandList; private TextBox robotCommandPayloadBox; private Button robotCommandClearButton;
-        private TabPage overviewPage;
+        private TabPage overviewPage; private TabPage userLoginPage;
         private ComboBox alarmViewFilter, alarmPriorityFilter; private Button acknowledgeSelectedButton, acknowledgeAllButton; private NumericUpDown alarmLimitBox;
         private ListView errorList; private Button errorRefreshButton, errorClearButton, errorAcknowledgeSelectedButton, errorAcknowledgeAllButton; private Label errorPathLabel; private ComboBox errorViewFilter; private NumericUpDown errorLimitBox;
+        private Panel firebaseLedPanel; private Label firebaseStatusLabel, firebaseTopicRootLabel;
+        private TextBox firebaseApiKeyBox, firebaseAuthDomainBox, firebaseProjectIdBox, firebaseEmailBox, firebasePhoneBox, firebaseUidBox, firebaseDisplayNameBox, firebaseProviderBox;
+        private Button firebasePasswordLoginButton, firebaseGoogleLoginButton, firebaseAppleLoginButton, firebaseSmsLoginButton, firebaseEmailCodeLoginButton, firebaseRefreshButton, firebaseSignOutButton;
 
         private void InitializeComponent()
         {
@@ -31,7 +34,7 @@ namespace MioneAlarmmelder.Forms
             statusLabel = new Label(); statusLabel.Text = "Wird gestartet ..."; statusLabel.Location = new Point(125, 56); statusLabel.AutoSize = true;
             ledPanel = new Panel(); ledPanel.Location = new Point(104, 54); ledPanel.Size = new Size(14, 14); ledPanel.BackColor = Color.Goldenrod;
             mqttLedPanel = new Panel(); mqttLedPanel.Location = new Point(515, 25); mqttLedPanel.Size = new Size(14, 14); mqttLedPanel.BackColor = Color.Gray;
-            mqttStatusLabel = new Label(); mqttStatusLabel.Text = "MQTT: deaktiviert"; mqttStatusLabel.Location = new Point(536, 24); mqttStatusLabel.Size = new Size(285, 20);
+            mqttStatusLabel = new Label(); mqttStatusLabel.Text = "System-MQTT: Offline"; mqttStatusLabel.Location = new Point(536, 24); mqttStatusLabel.Size = new Size(285, 20);
             tcpLedPanel = new Panel(); tcpLedPanel.Location = new Point(515, 54); tcpLedPanel.Size = new Size(14, 14); tcpLedPanel.BackColor = Color.Gray;
             tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 53); tcpStatusLabel.Size = new Size(285, 20);
             modemLedPanel = new Panel(); modemLedPanel.Location = new Point(515, 81); modemLedPanel.Size = new Size(14, 14); modemLedPanel.BackColor = Color.Gray;
@@ -39,7 +42,7 @@ namespace MioneAlarmmelder.Forms
             firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
             firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 108); tabs.Size = new Size(826, 434);
-            overviewPage = new TabPage("Übersicht"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage robotCommands = new TabPage("Funktionslog"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
+            overviewPage = new TabPage("Übersicht"); userLoginPage = new TabPage("User Login"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage robotCommands = new TabPage("Funktionslog"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
             alarmList = new ListView(); alarmList.Dock = DockStyle.Fill; alarmList.View = View.Details; alarmList.FullRowSelect = true; alarmList.GridLines = true;
             alarmList.Columns.Add("Zeit", 120); alarmList.Columns.Add("Code", 60); alarmList.Columns.Add("Ort", 105); alarmList.Columns.Add("Kuh", 85); alarmList.Columns.Add("Priorität", 85); alarmList.Columns.Add("Alarmtext", 320);
@@ -55,13 +58,40 @@ namespace MioneAlarmmelder.Forms
             urgentTestAlarmButton = new Button(); urgentTestAlarmButton.Text = "Testalarm (urgent) senden"; urgentTestAlarmButton.Location = new Point(8, 42); urgentTestAlarmButton.Size = new Size(190, 28); urgentTestAlarmButton.BackColor = Color.MistyRose; urgentTestAlarmButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             alarmTools.Controls.Add(viewLabel); alarmTools.Controls.Add(alarmViewFilter); alarmTools.Controls.Add(priorityLabel); alarmTools.Controls.Add(alarmPriorityFilter); alarmTools.Controls.Add(alarmLimitLabel); alarmTools.Controls.Add(alarmLimitBox); alarmTools.Controls.Add(acknowledgeSelectedButton); alarmTools.Controls.Add(acknowledgeAllButton); alarmTools.Controls.Add(urgentTestAlarmButton);
             overviewPage.Controls.Add(alarmList); overviewPage.Controls.Add(alarmTools);
+            GroupBox firebaseConfig = new GroupBox(); firebaseConfig.Text = "Firebase-Konfiguration"; firebaseConfig.Location = new Point(15, 12); firebaseConfig.Size = new Size(385, 385);
+            firebaseApiKeyBox = AddField(firebaseConfig, "API Key", 58);
+            firebaseAuthDomainBox = AddField(firebaseConfig, "Auth Domain", 92);
+            firebaseProjectIdBox = AddField(firebaseConfig, "Project ID", 126);
+            firebaseEmailBox = AddField(firebaseConfig, "E-Mail", 160);
+            firebasePhoneBox = AddField(firebaseConfig, "Telefon", 194);
+            firebaseUidBox = AddField(firebaseConfig, "System-ID", 228); firebaseUidBox.ReadOnly = true;
+            firebaseDisplayNameBox = AddField(firebaseConfig, "Anzeigename", 262); firebaseDisplayNameBox.ReadOnly = true;
+            firebaseProviderBox = AddField(firebaseConfig, "Provider", 296); firebaseProviderBox.ReadOnly = true;
+            firebaseTopicRootLabel = new Label(); firebaseTopicRootLabel.Location = new Point(18, 332); firebaseTopicRootLabel.Size = new Size(350, 34); firebaseTopicRootLabel.Text = "MQTT-Top-Topic: <system-id>/...";
+            firebaseConfig.Controls.Add(firebaseTopicRootLabel);
+            userLoginPage.Controls.Add(firebaseConfig);
+            GroupBox firebaseActions = new GroupBox(); firebaseActions.Text = "Login-Aktionen"; firebaseActions.Location = new Point(415, 12); firebaseActions.Size = new Size(385, 385);
+            Label loginHint = new Label(); loginHint.Location = new Point(16, 24); loginHint.Size = new Size(350, 32); loginHint.Text = "Die Schaltflächen öffnen die lokale Firebase-Anmeldeseite im Browser.";
+            firebaseLedPanel = new Panel(); firebaseLedPanel.Location = new Point(16, 182); firebaseLedPanel.Size = new Size(14, 14); firebaseLedPanel.BackColor = Color.Gray;
+            Label firebaseStatusTitle = new Label(); firebaseStatusTitle.Location = new Point(38, 179); firebaseStatusTitle.Size = new Size(120, 20); firebaseStatusTitle.Text = "Sessionstatus";
+            firebaseStatusLabel = new Label(); firebaseStatusLabel.AutoSize = false; firebaseStatusLabel.TextAlign = ContentAlignment.TopLeft;
+            firebasePasswordLoginButton = new Button(); firebasePasswordLoginButton.Text = "E-Mail / Passwort"; firebasePasswordLoginButton.Location = new Point(16, 62); firebasePasswordLoginButton.Size = new Size(110, 30);
+            firebaseGoogleLoginButton = new Button(); firebaseGoogleLoginButton.Text = "Google"; firebaseGoogleLoginButton.Location = new Point(136, 62); firebaseGoogleLoginButton.Size = new Size(110, 30);
+            firebaseAppleLoginButton = new Button(); firebaseAppleLoginButton.Text = "Apple"; firebaseAppleLoginButton.Location = new Point(256, 62); firebaseAppleLoginButton.Size = new Size(110, 30);
+            firebaseSmsLoginButton = new Button(); firebaseSmsLoginButton.Text = "SMS"; firebaseSmsLoginButton.Location = new Point(16, 100); firebaseSmsLoginButton.Size = new Size(110, 30);
+            firebaseEmailCodeLoginButton = new Button(); firebaseEmailCodeLoginButton.Text = "E-Mail & Code"; firebaseEmailCodeLoginButton.Location = new Point(136, 100); firebaseEmailCodeLoginButton.Size = new Size(110, 30);
+            firebaseRefreshButton = new Button(); firebaseRefreshButton.Text = "Token erneuern"; firebaseRefreshButton.Location = new Point(256, 100); firebaseRefreshButton.Size = new Size(110, 30);
+            firebaseSignOutButton = new Button(); firebaseSignOutButton.Text = "Abmelden"; firebaseSignOutButton.Location = new Point(16, 138); firebaseSignOutButton.Size = new Size(110, 30);
+            firebaseStatusLabel.Location = new Point(16, 184); firebaseStatusLabel.Size = new Size(350, 170); firebaseStatusLabel.Text = "Keine aktive Firebase-Session.";
+            firebaseActions.Controls.Add(loginHint); firebaseActions.Controls.Add(firebaseLedPanel); firebaseActions.Controls.Add(firebaseStatusTitle); firebaseActions.Controls.Add(firebasePasswordLoginButton); firebaseActions.Controls.Add(firebaseGoogleLoginButton); firebaseActions.Controls.Add(firebaseAppleLoginButton); firebaseActions.Controls.Add(firebaseSmsLoginButton); firebaseActions.Controls.Add(firebaseEmailCodeLoginButton); firebaseActions.Controls.Add(firebaseRefreshButton); firebaseActions.Controls.Add(firebaseSignOutButton); firebaseActions.Controls.Add(firebaseStatusLabel);
+            userLoginPage.Controls.Add(firebaseActions);
             messagePathBox = AddPath(paths, "Alarmdatei", 24); alarmSettingsPathBox = AddPath(paths, "Alarm-Einstellungen", 78);
             priorityPathBox = AddPath(paths, "Alarm-Prioritäten", 132); translationPathBox = AddPath(paths, "Übersetzungen", 186);
             alarmCatalogPathBox = AddPath(paths, "Alarmcode-Excel", 240);
             pathDialogButton = new Button(); pathDialogButton.Text = "Pfade prüfen/auswählen"; pathDialogButton.Location = new Point(640, 290); pathDialogButton.Size = new Size(155, 30); paths.Controls.Add(pathDialogButton);
-            GroupBox mqtt = new GroupBox(); mqtt.Text = "MQTT 3.1.1"; mqtt.Location = new Point(15, 12); mqtt.Size = new Size(385, 385);
-            mqttEnabledBox = AddCheck(mqtt, "MQTT-Versand aktiv", 20); mqttHostBox = AddField(mqtt, "Server", 58); mqttPortBox = AddField(mqtt, "Port", 98);
-            mqttUserBox = AddField(mqtt, "Benutzer / Topic", 138); mqttPasswordBox = AddField(mqtt, "Passwort", 178); mqttPasswordBox.UseSystemPasswordChar = true;
+            GroupBox mqtt = new GroupBox(); mqtt.Text = "2. MQTT 3.1.1 (Backup)"; mqtt.Location = new Point(15, 12); mqtt.Size = new Size(385, 385);
+            mqttEnabledBox = AddCheck(mqtt, "Backup-MQTT aktiv", 20); mqttHostBox = AddField(mqtt, "Backup-Server", 58); mqttPortBox = AddField(mqtt, "Backup-Port", 98);
+            mqttUserBox = AddField(mqtt, "Backup-Benutzer / Topic", 138); mqttPasswordBox = AddField(mqtt, "Backup-Passwort", 178); mqttPasswordBox.UseSystemPasswordChar = true;
             modemImeiBox = AddField(mqtt, "Modem-IMEI", 218);
             pollBox = AddField(mqtt, "Prüfintervall (s)", 258);
             startupBox = AddCheck(mqtt, "Mit Windows starten", 302);
@@ -118,7 +148,7 @@ namespace MioneAlarmmelder.Forms
             errorRefreshButton = new Button(); errorRefreshButton.Text = "Aktualisieren"; errorRefreshButton.Location = new Point(565, 365); errorRefreshButton.Size = new Size(110, 30); errorRefreshButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             errorClearButton = new Button(); errorClearButton.Text = "Protokoll löschen"; errorClearButton.Location = new Point(684, 365); errorClearButton.Size = new Size(118, 30); errorClearButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             errors.Controls.Add(errorList); errors.Controls.Add(errorTools); errors.Controls.Add(errorPathLabel); errors.Controls.Add(errorRefreshButton); errors.Controls.Add(errorClearButton);
-            tabs.TabPages.Add(overviewPage); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(dpProcess); tabs.TabPages.Add(robotCommands); tabs.TabPages.Add(updates); tabs.TabPages.Add(errors);
+            tabs.TabPages.Add(overviewPage); tabs.TabPages.Add(userLoginPage); tabs.TabPages.Add(paths); tabs.TabPages.Add(transport); tabs.TabPages.Add(dpProcess); tabs.TabPages.Add(robotCommands); tabs.TabPages.Add(updates); tabs.TabPages.Add(errors);
             saveButton = new Button(); saveButton.Text = "Einstellungen speichern"; saveButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right; saveButton.Location = new Point(650, 555); saveButton.Size = new Size(188, 32); saveButton.Visible = false;
             infoButton = new Button(); infoButton.Text = "Info"; infoButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; infoButton.Location = new Point(12, 555); infoButton.Size = new Size(100, 32);
             Controls.Add(logoPicture); Controls.Add(titleLabel); Controls.Add(versionLabel); Controls.Add(statusLabel); Controls.Add(ledPanel);

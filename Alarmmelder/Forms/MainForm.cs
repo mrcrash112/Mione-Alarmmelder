@@ -349,6 +349,22 @@ namespace MioneAlarmmelder.Forms
             firebaseStatusBox.Text = text;
         }
 
+        private void UpdateFirebaseActionState()
+        {
+            bool loginPending = Interlocked.CompareExchange(ref firebaseLoginPending, 0, 0) != 0;
+            FirebaseAuthSession activeSession = firebaseAuthService == null ? null : firebaseAuthService.CurrentSession;
+            bool signedIn = activeSession != null;
+            bool allowLogin = !signedIn && !loginPending;
+
+            firebasePasswordLoginButton.Enabled = allowLogin;
+            firebaseGoogleLoginButton.Enabled = allowLogin;
+            firebaseAppleLoginButton.Enabled = allowLogin;
+            firebaseSmsLoginButton.Enabled = allowLogin;
+            firebaseEmailCodeLoginButton.Enabled = allowLogin;
+            firebaseRefreshButton.Enabled = signedIn;
+            firebaseSignOutButton.Enabled = signedIn;
+        }
+
         private void LoadFirebaseFields()
         {
             firebaseEmailBox.Text = settings.FirebaseEmail;
@@ -360,8 +376,9 @@ namespace MioneAlarmmelder.Forms
             dpProcessTopicLabel.Text = "MQTT-Topic: " + topicRoot + "/Melkroboter";
             FirebaseAuthSession activeSession = firebaseAuthService == null ? null : firebaseAuthService.CurrentSession;
             if (activeSession != null) SetFirebaseStatus("Session aktiv\r\n" + BuildFirebaseSessionSummary(activeSession), MonitorState.Ok);
-            else if (!String.IsNullOrEmpty(settings.FirebaseUid)) SetFirebaseStatus("System-ID gespeichert, neu anmelden nötig.", MonitorState.Error);
-            else SetFirebaseStatus("Keine aktive Firebase-Session.", MonitorState.Disabled);
+            else if (!String.IsNullOrEmpty(settings.FirebaseUid)) SetFirebaseStatus("Abgemeldet.\r\nSystem-ID gespeichert, neu anmelden nötig.", MonitorState.Disabled);
+            else SetFirebaseStatus("Abgemeldet.\r\nKeine aktive Firebase-Session.", MonitorState.Disabled);
+            UpdateFirebaseActionState();
         }
 
         private static string BuildFirebaseSessionSummary(FirebaseAuthSession value)
@@ -523,12 +540,18 @@ namespace MioneAlarmmelder.Forms
         private void LaunchFirebaseLogin(string mode, string title)
         {
             if (!ReadFirebaseContactFields()) return;
+            if (firebaseAuthService != null && firebaseAuthService.CurrentSession != null)
+            {
+                MessageBox.Show("Bitte zuerst abmelden, bevor eine neue Anmeldung gestartet wird.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             if (Interlocked.Exchange(ref firebaseLoginPending, 1) != 0)
             {
                 MessageBox.Show("Es läuft bereits eine Firebase-Anmeldung.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             SetFirebaseStatus(title + " wird gestartet ...", MonitorState.Sending);
+            UpdateFirebaseActionState();
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
@@ -547,6 +570,10 @@ namespace MioneAlarmmelder.Forms
                 finally
                 {
                     Interlocked.Exchange(ref firebaseLoginPending, 0);
+                    if (!IsDisposed && IsHandleCreated)
+                    {
+                        try { BeginInvoke((MethodInvoker)delegate { UpdateFirebaseActionState(); }); } catch { }
+                    }
                 }
             });
         }
@@ -556,6 +583,7 @@ namespace MioneAlarmmelder.Forms
             LoadFirebaseFields();
             RenderDpProcessFiles();
             SetFirebaseStatus(title + " erfolgreich.", MonitorState.Ok);
+            UpdateFirebaseActionState();
             ResetConnectionStatus();
             if (SettingsSaved != null) SettingsSaved(this, EventArgs.Empty);
         }
@@ -563,6 +591,7 @@ namespace MioneAlarmmelder.Forms
         private void FirebaseLoginFailed(string title, Exception ex)
         {
             SetFirebaseStatus(title + " fehlgeschlagen.", MonitorState.Error);
+            UpdateFirebaseActionState();
             MessageBox.Show(ex.Message, "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
@@ -575,7 +604,7 @@ namespace MioneAlarmmelder.Forms
         private void FirebaseRefreshClick(object sender, EventArgs e)
         {
             if (!ReadFirebaseContactFields()) return;
-            if (!settings.HasFirebaseSession)
+            if (firebaseAuthService == null || firebaseAuthService.CurrentSession == null)
             {
                 MessageBox.Show(String.IsNullOrEmpty(settings.FirebaseUid) ? "Es ist noch keine Firebase-Session gespeichert." : "Die System-ID ist gespeichert, aber die Firebase-Session muss neu angemeldet werden.", "Firebase Login", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -593,6 +622,7 @@ namespace MioneAlarmmelder.Forms
                         LoadFirebaseFields();
                         RenderDpProcessFiles();
                         SetFirebaseStatus("Firebase-Session erneuert.", MonitorState.Ok);
+                        UpdateFirebaseActionState();
                         ResetConnectionStatus();
                     });
                 }
@@ -607,6 +637,7 @@ namespace MioneAlarmmelder.Forms
                             firebaseAuthService.InvalidateCurrentSession();
                             RefreshFirebaseFields();
                             SetFirebaseStatus("Firebase-Session konnte nicht erneuert werden.", MonitorState.Error);
+                            UpdateFirebaseActionState();
                             MessageBox.Show(ex.Message, "Firebase Refresh", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         });
                     }
@@ -622,6 +653,7 @@ namespace MioneAlarmmelder.Forms
             RenderDpProcessFiles();
             ResetConnectionStatus();
             SetFirebaseStatus("Firebase-Session abgemeldet.", MonitorState.Disabled);
+            UpdateFirebaseActionState();
             if (SettingsSaved != null) SettingsSaved(this, EventArgs.Empty);
         }
 

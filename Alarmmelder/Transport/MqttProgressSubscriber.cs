@@ -75,11 +75,13 @@ namespace MioneAlarmmelder.Transport
         {
             if (body.Length < 2) return;
             int topicLength = (body[0] << 8) | body[1];
+            if (body.Length < 2 + topicLength) return;
+            string topic = Encoding.UTF8.GetString(body, 2, topicLength);
             int offset = 2 + topicLength + (((header >> 1) & 3) > 0 ? 2 : 0);
             if (topicLength < 1 || offset > body.Length) return;
             string json = Encoding.UTF8.GetString(body, offset, body.Length - offset);
             AlarmProgressEvent value;
-            if (!AlarmProgressEvent.TryParse(json, "MQTT", out value) && !AlarmProgressEvent.TryParseModemStatus(json, "MQTT", out value)) return;
+            if (!AlarmProgressEvent.TryParse(json, "MQTT", topic, out value) && !AlarmProgressEvent.TryParseModemStatus(json, "MQTT", topic, out value)) return;
             if (!String.Equals(value.ModemImei, settings.ModemImei, StringComparison.Ordinal)) return;
             if (ProgressReceived != null) ProgressReceived(this, value);
         }

@@ -15,6 +15,9 @@ namespace MioneAlarmmelder
         private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer, firebaseRefreshTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending, firebaseRefreshPending;
         private string notifiedUpdateTag = "";
         private bool heartbeatValue;
+        private bool mqttModemOnline, mqttModemStatusSeen, mqttModemTimeoutLogged;
+        private DateTime mqttModemLastStatusUtc = DateTime.MinValue;
+        private const int ModemStatusTimeoutSeconds = 60;
         private const int FirebaseRefreshIntervalMinutes = 30;
 
         public AlarmApplicationContext()
@@ -84,6 +87,10 @@ namespace MioneAlarmmelder
             Interlocked.Exchange(ref milkingRobotPending, 0);
             Interlocked.Exchange(ref firebaseRefreshPending, 0);
             heartbeatValue = false;
+            mqttModemOnline = false;
+            mqttModemStatusSeen = false;
+            mqttModemTimeoutLogged = false;
+            mqttModemLastStatusUtc = DateTime.MinValue;
             milkingRobotPublisher = null;
             Interlocked.Exchange(ref updateCheckPending, 0);
             if (monitor != null) { monitor.Dispose(); monitor = null; } dispatcher = null;
@@ -93,8 +100,16 @@ namespace MioneAlarmmelder
             if (String.Equals(e.Action, "Modemstatus", StringComparison.OrdinalIgnoreCase))
             {
                 MonitorState modemState = ModemState(e.Status);
-                bool online = String.Equals(e.Source, "MQTT", StringComparison.OrdinalIgnoreCase) && modemState == MonitorState.Ok;
-                main.SetModemStatus("MQTT", online ? "Online" : "Offline", online ? MonitorState.Ok : MonitorState.Error);
+                bool fromMqttStatusTopic = IsMqttModemStatusTopic(e.Topic);
+                bool online = fromMqttStatusTopic && modemState == MonitorState.Ok;
+                if (fromMqttStatusTopic)
+                {
+                    mqttModemStatusSeen = true;
+                    mqttModemLastStatusUtc = DateTime.UtcNow;
+                    mqttModemOnline = online;
+                    mqttModemTimeoutLogged = false;
+                }
+                if (fromMqttStatusTopic) main.SetModemStatus("MQTT", online ? "Online" : "Offline", online ? MonitorState.Ok : MonitorState.Error);
                 if (!String.IsNullOrEmpty(e.FirmwareStatus))
                     main.SetFirmwareStatus(e.FirmwareStatus, modemState == MonitorState.Error ? MonitorState.Error :
                         e.FirmwareUpdateAvailable ? MonitorState.Waiting : MonitorState.Ok);
@@ -161,6 +176,7 @@ namespace MioneAlarmmelder
         private void HeartbeatTick(object state)
         {
             if (dispatcher == null || (!settings.SystemMqttReady && !settings.TcpEnabled)) return;
+            CheckModemStatusTimeout();
             if (Interlocked.Exchange(ref heartbeatPending, 1) != 0) return;
             if (settings.TcpEnabled) main.SetTcpStatus("Heartbeat wird gesendet", MonitorState.Sending);
             heartbeatValue = !heartbeatValue; dispatcher.DispatchHeartbeat(heartbeatValue);
@@ -183,6 +199,22 @@ namespace MioneAlarmmelder
             if (e.BackupMqttEnabled) main.SetBackupMqttStatus(e.BackupMqttSuccessful ? "Online" : "Offline", e.BackupMqttSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.TcpEnabled) main.SetTcpStatus(e.TcpSuccessful ? "Mobilkonfiguration OK" : "Config-Fehler", e.TcpSuccessful ? MonitorState.Ok : MonitorState.Error);
             if (e.Error.Length > 0) { ErrorLogger.Log("Mobilkonfiguration", e.Error); main.SetStatus("Config-Fehler - siehe Fehlerprotokoll", MonitorState.Error); }
+        }
+        private void CheckModemStatusTimeout()
+        {
+            if (!mqttModemStatusSeen || !mqttModemOnline) return;
+            if (DateTime.UtcNow.Subtract(mqttModemLastStatusUtc).TotalSeconds <= ModemStatusTimeoutSeconds) return;
+            mqttModemOnline = false;
+            main.SetModemStatus("MQTT", "Offline", MonitorState.Error);
+            if (!mqttModemTimeoutLogged)
+            {
+                mqttModemTimeoutLogged = true;
+                ErrorLogger.Log("Modem-MQTT", "Seit mehr als 60 Sekunden wurde kein frischer Modemstatus empfangen.");
+            }
+        }
+        private static bool IsMqttModemStatusTopic(string topic)
+        {
+            return !String.IsNullOrEmpty(topic) && topic.EndsWith("/Alarmfunktionen/ModemStatus", StringComparison.OrdinalIgnoreCase);
         }
         private void MilkingRobotCommandReceived(object sender, MilkingRobotCommandEventArgs e)
         {

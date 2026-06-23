@@ -14,12 +14,18 @@ namespace MioneAlarmmelder.Transport
         public string Status { get; private set; }
         public string Timestamp { get; private set; }
         public string Source { get; private set; }
+        public string Topic { get; private set; }
         public string FirmwareStatus { get; private set; }
         public bool FirmwareUpdateAvailable { get; private set; }
 
         private AlarmProgressEvent() { }
 
         public static bool TryParse(string json, string source, out AlarmProgressEvent value)
+        {
+            return TryParse(json, source, "", out value);
+        }
+
+        public static bool TryParse(string json, string source, string topic, out AlarmProgressEvent value)
         {
             value = null;
             try
@@ -31,7 +37,7 @@ namespace MioneAlarmmelder.Transport
                     ModemImei = Text(data, "modemImei"), AlarmCode = Text(data, "alarmCode"),
                     AlarmText = Text(data, "alarmText"), Number = Text(data, "number"),
                     Action = Text(data, "action"), Status = Text(data, "status"),
-                    Timestamp = Text(data, "timestamp"), Source = source ?? ""
+                    Timestamp = Text(data, "timestamp"), Source = source ?? "", Topic = topic ?? ""
                 };
                 return value.ModemImei.Length > 0 && value.Number.Length > 0;
             }
@@ -39,6 +45,11 @@ namespace MioneAlarmmelder.Transport
         }
 
         public static bool TryParseModemStatus(string json, string source, out AlarmProgressEvent value)
+        {
+            return TryParseModemStatus(json, source, "", out value);
+        }
+
+        public static bool TryParseModemStatus(string json, string source, string topic, out AlarmProgressEvent value)
         {
             value = null;
             try
@@ -54,7 +65,7 @@ namespace MioneAlarmmelder.Transport
                 string firmwareStatus = BuildFirmwareStatus(update);
                 value = new AlarmProgressEvent
                 {
-                    ModemImei = modemImei, Status = status, Timestamp = Text(data, "timestamp"), Source = source ?? "",
+                    ModemImei = modemImei, Status = status, Timestamp = Text(data, "timestamp"), Source = source ?? "", Topic = topic ?? "",
                     Action = "Modemstatus", Number = "-", FirmwareStatus = firmwareStatus,
                     FirmwareUpdateAvailable = update != null && Truthy(update, "available")
                 };

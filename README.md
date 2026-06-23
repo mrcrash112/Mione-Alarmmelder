@@ -15,8 +15,7 @@ Klassische Windows-Forms-Anwendung für **.NET Framework 3.5**. Die Lösung kann
 - kann im Update-Tab zwischen Stable- und Beta-Kanal wählen
 - wiederholt die Updateprüfung im Hintergrund und markiert verfügbare Updates in der Übersicht mit Priorität `message`
 - zeigt Datei-, Verbindungs-, Heartbeat- und Updatefehler in einem eigenen Protokoll-Tab
-- zeigt unter der TCP-LED den Modemstatus: per Socket anhand der direkten Heartbeat-Verbindung, per MQTT nach einer Rückmeldung mit passender IMEI
-- meldet nach 60 Sekunden ohne Modemstatus-Heartbeat einen Verbindungsverlust
+- zeigt unter der TCP-LED den Modemstatus als einfache MQTT-Online/Offline-Anzeige mit passender IMEI
 - zeigt Modem-Firmware, Recovery, WWW-Version, Stable/Beta-Kanal und OTA-Status
 - bietet in der Übersicht einen dringenden Testalarm mit Priorität `urgent`, der gespeichert und über MQTT sowie TCP versendet wird
 - zeigt Kuhnummer und installierte Programmversion direkt in der Oberfläche
@@ -47,6 +46,7 @@ Standardpfade:
 4. Den gesamten Inhalt von `Alarmmelder\bin\Release` auf den Zielrechner kopieren.
 
 Alternativ kann `build-release.cmd` in einer Visual-Studio-Entwicklerkonsole ausgeführt werden.
+Für einen Beta-Release mit automatischem Versionssprung und GitHub-Upload kann `./release-beta.sh` verwendet werden.
 
 ### Kompilieren unter macOS mit VS Code
 

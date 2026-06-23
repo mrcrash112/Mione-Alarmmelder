@@ -175,7 +175,10 @@ namespace MioneAlarmmelder.Transport
             Add(b, "datum", a.DateText); b.Append(','); Add(b, "uhrzeit", a.TimeText); b.Append(',');
             Add(b, "alarmCode", a.Code); b.Append(','); Add(b, "ort", a.Location); b.Append(',');
             Add(b, "kuh", a.CowNumber); b.Append(','); Add(b, "prioritaet", a.Priority); b.Append(',');
-            Add(b, "alarmText", WithoutGermanUmlauts(a.ClearText)); b.Append("}"); return b.ToString();
+            Add(b, "alarmText", WithoutGermanUmlauts(a.ClearText)); b.Append(',');
+            Add(b, "alarmhilfe", WithoutGermanUmlauts(a.Cause)); b.Append(',');
+            Add(b, "moeglicheLoesung", WithoutGermanUmlauts(a.Solution));
+            b.Append("}"); return b.ToString();
         }
         private static string BuildHeartbeatJson(bool value, string modemImei)
         {

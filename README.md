@@ -68,7 +68,7 @@ Windows XP benötigt .NET Framework 3.5 SP1. Unter Windows 10/11 muss das option
 ## JSON-Format
 
 ```json
-{"datum":"20.06.26","uhrzeit":"13:10:59","alarmCode":"131","ort":"Melkbox 1","kuh":"0","prioritaet":"urgent","alarmText":"..."}
+{"datum":"20.06.26","uhrzeit":"13:10:59","alarmCode":"131","ort":"Melkbox 1","kuh":"0","prioritaet":"urgent","alarmText":"...","alarmhilfe":"...","moeglicheLoesung":"..."}
 ```
 
 TCP sendet je JSON-Objekt eine UTF-8-Zeile. Bei Alarmen bleibt die Verbindung bis zur Antwort des Modems offen. Bei MQTT bildet der Benutzername das Top-Topic. Alarme werden nach `<Benutzername>/Alarmfunktionen/Alarm`, Mobilnummern samt Aktivzustand, `AlarmsTo` und dem Zeitfenster für technische Alarme nach `<Benutzername>/Alarmfunktionen/Config/Mobile` und Heartbeats nach `<Benutzername>/Alarmfunktionen/Heartbeat` gesendet. Die Mobilkonfiguration wird auch per TCP übertragen. Die Sekundenwerte `technicalAlarmMessagingFrom` und `technicalAlarmMessagingUntil` werden zusätzlich als lesbare `...Text`-Uhrzeiten ausgegeben. Alarm, Mobilkonfiguration und Heartbeat enthalten außerdem das Feld `modemImei`, damit nur das konfigurierte Modem reagiert. Der eingebaute MQTT-Client unterstützt bewusst unverschlüsseltes MQTT auf typischerweise Port 1883; TLS kann wegen der sehr alten TLS-Unterstützung von Windows XP nicht zuverlässig für XP bis Windows 11 gemeinsam angeboten werden.
@@ -115,7 +115,7 @@ sondern wartet bis zu 60 Sekunden darauf, dass `DPProcessControl` bereits vom
 System gestartet wurde. Die Bridge erwartet `RDM\CORBA\DP_RDM_COM.ior` im
 konfigurierten DairyPln-Pfad.
 
-Der versendete `alarmText` wird für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
+Der versendete `alarmText`, die `alarmhilfe` und die `moeglicheLoesung` werden für Modemkompatibilität ohne deutsche Umlaute ausgegeben (`ä` = `ae`, `ö` = `oe`, `ü` = `ue`, `ß` = `ss`). Die Anzeige in der Anwendung bleibt unverändert.
 
 ### MQTT-Testprogramm auf macOS
 
@@ -146,4 +146,4 @@ aktuelle Sitzung verwendet.
 
 ## GitHub-Updates
 
-Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen und den Kanal wählen. **Stable** prüft das neueste öffentliche GitHub-Release. **Beta** prüft den Release-Tag `beta` und liest die Version aus dem ZIP-Asset, zum Beispiel `MioneAlarmmelder-1.1.9.30_Beta.zip`. Beta-Builds werden in der Oberfläche mit `_Beta` angezeigt. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.
+Im Tab **Updates** das öffentliche Repository als `Besitzer/Repository` eintragen und den Kanal wählen. **Stable** prüft das neueste öffentliche GitHub-Release. **Beta** prüft den Release-Tag `beta` und liest die Version aus dem ZIP-Asset, zum Beispiel `MioneAlarmmelder-1.1.9.31_Beta.zip`. Beta-Builds werden in der Oberfläche mit `_Beta` angezeigt. Nach Bestätigung lädt die Anwendung dieses Asset, prüft einen vorhandenen GitHub-SHA-256-Digest, ersetzt die EXE und startet neu. GitHub erfordert TLS 1.2; deshalb funktioniert die direkte Updateprüfung auf Windows XP abhängig von dessen TLS-Konfiguration möglicherweise nicht.

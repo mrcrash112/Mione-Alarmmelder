@@ -40,7 +40,7 @@ namespace MioneAlarmmelder.Forms
             tcpLedPanel = new Panel(); tcpLedPanel.Location = new Point(515, 83); tcpLedPanel.Size = new Size(14, 14); tcpLedPanel.BackColor = Color.Gray;
             tcpStatusLabel = new Label(); tcpStatusLabel.Text = "TCP: deaktiviert"; tcpStatusLabel.Location = new Point(536, 82); tcpStatusLabel.Size = new Size(285, 20);
             modemLedPanel = new Panel(); modemLedPanel.Location = new Point(515, 112); modemLedPanel.Size = new Size(14, 14); modemLedPanel.BackColor = Color.Gray;
-            modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem: deaktiviert"; modemStatusLabel.Location = new Point(536, 111); modemStatusLabel.Size = new Size(285, 20);
+            modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem-MQTT: Offline"; modemStatusLabel.Location = new Point(536, 111); modemStatusLabel.Size = new Size(285, 20);
             firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
             firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 136); tabs.Size = new Size(826, 406);

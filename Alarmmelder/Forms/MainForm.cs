@@ -211,9 +211,10 @@ namespace MioneAlarmmelder.Forms
         public void SetModemStatus(string transport, string text, MonitorState state)
         {
             if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { SetModemStatus(transport, text, state); }); return; }
-            modemLedPanel.BackColor = StateColor(state);
-            modemStatusLabel.Text = "Modem" + (String.IsNullOrEmpty(transport) ? "" : " (" + transport + ")") + ": " + ShortText(text, 30);
-            modemStatusLabel.Tag = text;
+            bool online = state == MonitorState.Ok || String.Equals(text, "Online", StringComparison.OrdinalIgnoreCase) || String.Equals(text, "aktiv", StringComparison.OrdinalIgnoreCase);
+            modemLedPanel.BackColor = online ? Color.LimeGreen : Color.Red;
+            modemStatusLabel.Text = "Modem-MQTT: " + (online ? "Online" : "Offline");
+            modemStatusLabel.Tag = online ? "Online" : "Offline";
         }
         public void SetFirmwareStatus(string text, MonitorState state)
         {
@@ -232,9 +233,7 @@ namespace MioneAlarmmelder.Forms
             SetBackupMqttStatus(backupReady ? "bereit" : "deaktiviert",
                 backupReady ? MonitorState.Waiting : MonitorState.Disabled);
             SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
-            SetModemStatus(settings.TcpEnabled ? "Socket" : systemReady ? "MQTT" : "",
-                settings.TcpEnabled ? "wird geprüft" : systemReady ? "warte auf Rückmeldung" : "deaktiviert",
-                settings.TcpEnabled || systemReady ? MonitorState.Waiting : MonitorState.Disabled);
+            SetModemStatus("MQTT", "Offline", MonitorState.Error);
             SetFirmwareStatus(settings.TcpEnabled || systemReady ? "warte auf Status" : "deaktiviert",
                 settings.TcpEnabled || systemReady ? MonitorState.Waiting : MonitorState.Disabled);
         }

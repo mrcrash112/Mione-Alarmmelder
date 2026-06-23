@@ -169,7 +169,7 @@ namespace MioneAlarmmelder.Core
         private string FindPriority(string code)
         {
             string exact = "string.data.rdm.alarmmessage.priority." + code;
-            string value; return priorities.TryGetValue(exact, out value) ? value : "System";
+            string value; return priorities.TryGetValue(exact, out value) ? value : "system";
         }
 
         private void ApplyAlarmDetails(AlarmMessage alarm)

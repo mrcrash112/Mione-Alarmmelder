@@ -25,7 +25,7 @@ namespace MioneAlarmmelder.Core
             alarm = new AlarmMessage
             {
                 DateText = values[0], TimeText = values[1], Code = values[2],
-                Location = values[3], CowNumber = values[4], Priority = "System", ClearText = "Alarmtext nicht gefunden", Cause = "", Solution = ""
+                Location = values[3], CowNumber = values[4], Priority = "system", ClearText = "Alarmtext nicht gefunden", Cause = "", Solution = ""
             };
             return true;
         }

@@ -15,8 +15,19 @@ namespace MioneAlarmmelder.Transport
         public string Timestamp { get; private set; }
         public string Source { get; private set; }
         public string Topic { get; private set; }
+        public string PayloadSource { get; private set; }
+        public string ConfirmedBy { get; private set; }
+        public string ConfirmedAt { get; private set; }
         public string FirmwareStatus { get; private set; }
         public bool FirmwareUpdateAvailable { get; private set; }
+        public bool HasTheAppConfirmation
+        {
+            get
+            {
+                return String.Equals(PayloadSource, "the_app", StringComparison.OrdinalIgnoreCase) &&
+                    !String.IsNullOrEmpty(ConfirmedBy) && !String.IsNullOrEmpty(ConfirmedAt);
+            }
+        }
 
         private AlarmProgressEvent() { }
 
@@ -37,7 +48,8 @@ namespace MioneAlarmmelder.Transport
                     ModemImei = Text(data, "modemImei"), AlarmCode = Text(data, "alarmCode"),
                     AlarmText = Text(data, "alarmText"), Number = Text(data, "number"),
                     Action = Text(data, "action"), Status = Text(data, "status"),
-                    Timestamp = Text(data, "timestamp"), Source = source ?? "", Topic = topic ?? ""
+                    Timestamp = Text(data, "timestamp"), Source = source ?? "", Topic = topic ?? "",
+                    PayloadSource = Text(data, "source"), ConfirmedBy = Text(data, "confirmedBy"), ConfirmedAt = Text(data, "confirmedAt")
                 };
                 return value.ModemImei.Length > 0 && value.Number.Length > 0;
             }

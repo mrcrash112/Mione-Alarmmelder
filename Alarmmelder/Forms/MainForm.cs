@@ -39,7 +39,7 @@ namespace MioneAlarmmelder.Forms
             InitializeComponent(); ErrorLogger.ConfigureMaximum(settings.ErrorHistoryLimit); alarmHistory = AlarmHistoryStore.Load(settings.AlarmHistoryLimit); LoadLogo(); LoadFields();
             alarmViewFilter.Items.Add("Nur unbestätigte"); alarmViewFilter.Items.Add("Alle Alarme"); alarmViewFilter.SelectedIndex = 0;
             alarmPriorityFilter.Items.Add("Alle Prioritäten"); alarmPriorityFilter.Items.Add("attention"); alarmPriorityFilter.Items.Add("urgent");
-            alarmPriorityFilter.Items.Add("messages"); alarmPriorityFilter.Items.Add("technical"); alarmPriorityFilter.Items.Add("message"); alarmPriorityFilter.Items.Add("System"); alarmPriorityFilter.SelectedIndex = 0;
+            alarmPriorityFilter.Items.Add("messages"); alarmPriorityFilter.Items.Add("technical"); alarmPriorityFilter.Items.Add("message"); alarmPriorityFilter.Items.Add("system"); alarmPriorityFilter.SelectedIndex = 0;
             alarmLimitBox.Value = settings.AlarmHistoryLimit;
             errorViewFilter.Items.Add("Nur unbestätigte"); errorViewFilter.Items.Add("Alle Fehler"); errorViewFilter.SelectedIndex = 0; errorLimitBox.Value = settings.ErrorHistoryLimit;
             saveButton.Click += SaveClick; testButton.Click += TestClick; pathDialogButton.Click += PathDialogClick;
@@ -104,7 +104,8 @@ namespace MioneAlarmmelder.Forms
         public void AddAlarm(AlarmMessage alarm)
         {
             if (InvokeRequired) { BeginInvoke(new Action<AlarmMessage>(AddAlarm), alarm); return; }
-            if (String.IsNullOrEmpty(alarm.Priority) || String.Equals(alarm.Priority, "unbekannt", StringComparison.OrdinalIgnoreCase)) alarm.Priority = "System";
+            if (alarm == null) return;
+            alarm.Priority = NormalizeAlarmPriority(alarm.Priority);
             AlarmHistoryEntry entry = new AlarmHistoryEntry { Id = DateTime.UtcNow.Ticks, ReceivedAt = DateTime.Now, Acknowledged = false, Alarm = alarm };
             alarmHistory.Insert(0, entry); while (alarmHistory.Count > settings.AlarmHistoryLimit) alarmHistory.RemoveAt(alarmHistory.Count - 1);
             AlarmHistoryStore.Save(alarmHistory, settings.AlarmHistoryLimit); RenderAlarmList();
@@ -115,21 +116,23 @@ namespace MioneAlarmmelder.Forms
             if (alarmHistory == null) return;
             List<AlarmHistoryEntry> visible = new List<AlarmHistoryEntry>();
             bool onlyOpen = alarmViewFilter.SelectedIndex <= 0;
-            string priority = alarmPriorityFilter.SelectedIndex <= 0 ? "" : alarmPriorityFilter.SelectedItem.ToString();
+            string priority = alarmPriorityFilter.SelectedIndex <= 0 ? "" : NormalizeAlarmPriority(alarmPriorityFilter.SelectedItem.ToString());
             for (int i = 0; i < alarmHistory.Count; i++)
             {
                 AlarmHistoryEntry entry = alarmHistory[i];
                 if (onlyOpen && entry.Acknowledged) continue;
-                if (priority.Length > 0 && !String.Equals(entry.Alarm.Priority, priority, StringComparison.OrdinalIgnoreCase)) continue;
+                string alarmPriority = NormalizeAlarmPriority(entry.Alarm.Priority);
+                if (priority.Length > 0 && !String.Equals(alarmPriority, priority, StringComparison.OrdinalIgnoreCase)) continue;
                 visible.Add(entry);
             }
             visible.Sort(CompareAlarmEntries); alarmList.BeginUpdate(); alarmList.Items.Clear();
             for (int i = 0; i < visible.Count; i++)
             {
                 AlarmHistoryEntry entry = visible[i]; AlarmMessage alarm = entry.Alarm;
+                string alarmPriority = NormalizeAlarmPriority(alarm.Priority);
                 ListViewItem item = new ListViewItem(alarm.DateText + " " + alarm.TimeText); item.SubItems.Add(alarm.Code);
-                item.SubItems.Add(alarm.Location); item.SubItems.Add(alarm.CowNumber); item.SubItems.Add(alarm.Priority); item.SubItems.Add(alarm.ClearText);
-                item.Tag = entry; item.BackColor = entry.Acknowledged ? Color.White : Color.LightCoral; alarmList.Items.Add(item);
+                item.SubItems.Add(alarm.Location); item.SubItems.Add(alarm.CowNumber); item.SubItems.Add(alarmPriority); item.SubItems.Add(alarm.ClearText);
+                item.Tag = entry; item.BackColor = entry.Acknowledged || IsNeutralAlarmPriority(alarmPriority) ? Color.White : Color.LightCoral; alarmList.Items.Add(item);
             }
             alarmList.EndUpdate(); UpdateColumnHeadings();
         }
@@ -151,7 +154,7 @@ namespace MioneAlarmmelder.Forms
         private static string AlarmColumnValue(AlarmMessage alarm, int column)
         {
             if (column == 1) return alarm.Code; if (column == 2) return alarm.Location; if (column == 3) return alarm.CowNumber;
-            if (column == 4) return alarm.Priority; return alarm.ClearText;
+            if (column == 4) return NormalizeAlarmPriority(alarm.Priority); return alarm.ClearText;
         }
         private void AlarmColumnClick(object sender, ColumnClickEventArgs e)
         {
@@ -177,6 +180,33 @@ namespace MioneAlarmmelder.Forms
         private void RefreshAcknowledgementState()
         {
             overviewUpdateHighlight = HasUnacknowledgedUpdate(); tabs.Invalidate(); RenderAlarmList();
+        }
+        public void AutoAcknowledgeAlarm(AlarmProgressEvent value)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action<AlarmProgressEvent>(AutoAcknowledgeAlarm), value); return; }
+            if (value == null || alarmHistory == null) return;
+            AlarmHistoryEntry entry = FindAlarmForAutoAcknowledge(value);
+            if (entry == null) return;
+            if (entry.Acknowledged) return;
+            entry.Acknowledged = true;
+            AlarmHistoryStore.Save(alarmHistory, settings.AlarmHistoryLimit);
+            RefreshAcknowledgementState();
+        }
+        private AlarmHistoryEntry FindAlarmForAutoAcknowledge(AlarmProgressEvent value)
+        {
+            string code = NormalizeComparisonText(value.AlarmCode);
+            if (code.Length == 0) return null;
+            string alarmText = NormalizeComparisonText(value.AlarmText);
+            AlarmHistoryEntry fallback = null;
+            for (int i = 0; i < alarmHistory.Count; i++)
+            {
+                AlarmHistoryEntry entry = alarmHistory[i];
+                if (entry == null || entry.Alarm == null || entry.Acknowledged) continue;
+                if (!String.Equals(NormalizeComparisonText(entry.Alarm.Code), code, StringComparison.OrdinalIgnoreCase)) continue;
+                if (alarmText.Length > 0 && TextMatches(entry.Alarm.ClearText, value.AlarmText)) return entry;
+                if (fallback == null) fallback = entry;
+            }
+            return fallback;
         }
         private bool HasUnacknowledgedUpdate()
         {
@@ -663,6 +693,29 @@ namespace MioneAlarmmelder.Forms
             if (!settings.ShowAlarmProgress || value == null) return;
             if (alarmProgressForm == null || alarmProgressForm.IsDisposed) alarmProgressForm = new AlarmProgressForm();
             alarmProgressForm.UpdateProgress(value);
+        }
+        private static string NormalizeAlarmPriority(string priority)
+        {
+            string value = (priority ?? "").Trim();
+            if (value.Length == 0 || String.Equals(value, "unbekannt", StringComparison.OrdinalIgnoreCase)) return "system";
+            return value.ToLowerInvariant();
+        }
+        private static bool IsNeutralAlarmPriority(string priority)
+        {
+            string value = NormalizeAlarmPriority(priority);
+            return String.Equals(value, "system", StringComparison.OrdinalIgnoreCase) || String.Equals(value, "message", StringComparison.OrdinalIgnoreCase);
+        }
+        private static string NormalizeComparisonText(string value)
+        {
+            value = (value ?? "").Trim().ToLowerInvariant();
+            return value.Replace("ä", "ae").Replace("ö", "oe").Replace("ü", "ue").Replace("ß", "ss");
+        }
+        private static bool TextMatches(string left, string right)
+        {
+            string a = NormalizeComparisonText(left);
+            string b = NormalizeComparisonText(right);
+            if (a.Length == 0 || b.Length == 0) return false;
+            return String.Equals(a, b, StringComparison.OrdinalIgnoreCase) || a.IndexOf(b, StringComparison.OrdinalIgnoreCase) >= 0 || b.IndexOf(a, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public void AddMilkingRobotCommand(MilkingRobotCommandEventArgs value)

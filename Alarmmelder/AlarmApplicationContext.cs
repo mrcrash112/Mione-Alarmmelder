@@ -117,12 +117,17 @@ namespace MioneAlarmmelder
             }
             MonitorState state = ModemState(e.Status);
             main.ShowAlarmProgress(e);
+            if (e.HasTheAppConfirmation && IsAlarmStatusTopic(e.Topic)) main.AutoAcknowledgeAlarm(e);
         }
         private static MonitorState ModemState(string status)
         {
             string text = (status ?? "").ToLowerInvariant();
             if (text.IndexOf("offline") >= 0 || text.IndexOf("fehler") >= 0 || text.IndexOf("error") >= 0 || text.IndexOf("nicht") >= 0) return MonitorState.Error;
             return MonitorState.Ok;
+        }
+        private static bool IsAlarmStatusTopic(string topic)
+        {
+            return !String.IsNullOrEmpty(topic) && topic.EndsWith("/Alarmfunktionen/AlarmStatus", StringComparison.OrdinalIgnoreCase);
         }
         private void MonitorStatusChanged(object sender, MonitorStatusEventArgs e) { if (e.State == MonitorState.Error) { ErrorLogger.Log("Dateiüberwachung", e.Text); main.SetStatus("Fehler - siehe Fehlerprotokoll", MonitorState.Error); } else main.SetStatus(e.Text, e.State); }
         private void PhonesChanged(object sender, EventArgs e)

@@ -43,7 +43,8 @@ namespace MioneAlarmmelder.Core
                             Location = Child(node, "location"), CowNumber = Child(node, "cow"), Priority = Child(node, "priority"), ClearText = Child(node, "text"),
                             Cause = Child(node, "cause"), Solution = Child(node, "solution")
                         };
-                        if (String.IsNullOrEmpty(alarm.Priority) || alarm.Priority == "unbekannt") alarm.Priority = "System";
+                        if (String.IsNullOrEmpty(alarm.Priority) || alarm.Priority == "unbekannt") alarm.Priority = "system";
+                        else if (String.Equals(alarm.Priority, "System", StringComparison.OrdinalIgnoreCase)) alarm.Priority = "system";
                         entries.Add(new AlarmHistoryEntry { Id = id, ReceivedAt = new DateTime(ticks), Acknowledged = acknowledged, Alarm = alarm });
                     }
                 }

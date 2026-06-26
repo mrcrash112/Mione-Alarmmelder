@@ -210,7 +210,9 @@ namespace MioneAlarmmelder.Core
             using (StreamWriter writer = new StreamWriter(script, false, Encoding.Default))
             {
                 writer.WriteLine("@echo off"); writer.WriteLine("ping 127.0.0.1 -n 4 >nul");
-                writer.WriteLine("if exist \"" + targetAssets + "\" rmdir /S /Q \"" + targetAssets + "\"");
+                writer.WriteLine("if exist \"" + targetAssets + "\\MioneDairyPlanBridge*.jar\" del /Q \"" + targetAssets + "\\MioneDairyPlanBridge*.jar\"");
+                writer.WriteLine("if exist \"" + targetAssets + "\\translations_de*.properties\" del /Q \"" + targetAssets + "\\translations_de*.properties\"");
+                writer.WriteLine("if exist \"" + targetAssets + "\\Mione_AlarmCodes_UK_DE*.xlsx\" del /Q \"" + targetAssets + "\\Mione_AlarmCodes_UK_DE*.xlsx\"");
                 writer.WriteLine("xcopy /E /I /Y \"" + packageFolder + "\\*\" \"" + targetFolder + "\\\" >nul");
                 writer.WriteLine("if errorlevel 1 (pause & exit /b 1)");
                 writer.WriteLine("del /Q \"" + download + "\"");

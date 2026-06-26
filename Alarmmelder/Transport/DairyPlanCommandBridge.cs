@@ -2,9 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
-using System.Net;
 using System.Text;
-using System.Xml;
 using MioneAlarmmelder.Core;
 
 namespace MioneAlarmmelder.Transport
@@ -29,7 +27,6 @@ namespace MioneAlarmmelder.Transport
                 DairyPlanCommandResult waitResult = WaitForDpProcessControl();
                 if (waitResult != null) return waitResult;
 
-                BoxStateSnapshot beforeState = RequiresBoxStateConfirmation(command) ? ReadBoxState(command.BoxNumber) : null;
                 string java = FindJava(root);
                 string classPath = bridgeJar + Path.PathSeparator + rdmJar;
                 string args = "-cp " + Quote(classPath) + " MioneDairyPlanBridge --ior " + Quote(ior) + " --command " + Quote(command.Name) +
@@ -53,15 +50,7 @@ namespace MioneAlarmmelder.Transport
                         text += "\r\nJava Runtime ohne CORBA erkannt. Bitte Java 6 bis Java 8 fuer die DairyPlan-Bridge verwenden.";
                     if (process.ExitCode == 0)
                     {
-                        DairyPlanCommandResult result = new DairyPlanCommandResult(true, "forwardedToDairyPlan", text.Length == 0 ? "Befehl wurde an DPProcessControl uebergeben." : text);
-                        if (beforeState != null)
-                        {
-                            BoxStateSnapshot afterState = WaitForBoxStateChange(command.BoxNumber, beforeState, 12000);
-                            if (afterState == null)
-                                return DairyPlanCommandResult.Fail("nativeBridgeNoEffect", "DairyPlan hat den Befehl angenommen, aber fuer Box " + command.BoxNumber + " ist keine sichtbare Zustandsaenderung aufgetreten.");
-                            result = new DairyPlanCommandResult(true, "forwardedToDairyPlan", result.Message + "\r\nBox " + command.BoxNumber + " Zustand aktualisiert: " + afterState.Summary);
-                        }
-                        return result;
+                        return new DairyPlanCommandResult(true, "forwardedToDairyPlan", text.Length == 0 ? "Befehl wurde an DPProcessControl uebergeben." : text);
                     }
                     return DairyPlanCommandResult.Fail("nativeBridgeError", "DairyPlan-Bridge Fehler " + process.ExitCode + ": " + text);
                 }
@@ -159,107 +148,6 @@ namespace MioneAlarmmelder.Transport
             return b.ToString();
         }
 
-        private static bool RequiresBoxStateConfirmation(MilkingRobotCommand command)
-        {
-            if (command == null || String.IsNullOrEmpty(command.BoxNumber)) return false;
-            return String.Equals(command.Name, "enableBox", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "disableBox", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "startShortCleaning", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "stopShortCleaning", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "stopMilking", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "setManualMilkingOneBox", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "setAutomaticMilkingOneBox", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "startAugerCalibration", StringComparison.OrdinalIgnoreCase) ||
-                String.Equals(command.Name, "stopAugerCalibration", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static BoxStateSnapshot ReadBoxState(string boxNumber)
-        {
-            if (String.IsNullOrEmpty(boxNumber)) return null;
-            try
-            {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://localhost:8080/RdmDataService.svc/BoxInfos");
-                request.Timeout = 1500; request.ReadWriteTimeout = 1500; request.Accept = "application/atom+xml,application/xml,text/xml";
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                using (Stream stream = response.GetResponseStream())
-                {
-                    XmlDocument document = new XmlDocument(); document.Load(stream);
-                    XmlNodeList entries = document.GetElementsByTagName("entry");
-                    for (int i = 0; i < entries.Count; i++)
-                    {
-                        BoxStateSnapshot snapshot = ReadBoxState(entries[i], boxNumber);
-                        if (snapshot != null) return snapshot;
-                    }
-                    XmlNodeList properties = document.GetElementsByTagName("properties", "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata");
-                    for (int i = 0; i < properties.Count; i++)
-                    {
-                        BoxStateSnapshot snapshot = ReadBoxState(properties[i], boxNumber);
-                        if (snapshot != null) return snapshot;
-                    }
-                }
-            }
-            catch { }
-            return null;
-        }
-
-        private static BoxStateSnapshot ReadBoxState(XmlNode node, string boxNumber)
-        {
-            if (node == null) return null;
-            if (!String.Equals(ChildText(node, "BoxNumber"), boxNumber, StringComparison.OrdinalIgnoreCase)) return null;
-            return new BoxStateSnapshot
-            {
-                BoxNumber = ChildText(node, "BoxNumber"),
-                AttachmentStatus = ChildText(node, "AttachmentStatus"),
-                OperationStatus = ChildText(node, "OperationStatus"),
-                OperationStatusText = ChildText(node, "OperationStatusText"),
-                BoxStatus = ChildText(node, "BoxStatus"),
-                BoxStatusText = ChildText(node, "BoxStatusText")
-            };
-        }
-
-        private static BoxStateSnapshot WaitForBoxStateChange(string boxNumber, BoxStateSnapshot before, int timeoutMilliseconds)
-        {
-            DateTime until = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
-            while (DateTime.UtcNow <= until)
-            {
-                BoxStateSnapshot current = ReadBoxState(boxNumber);
-                if (current != null && !String.Equals(current.Signature, before.Signature, StringComparison.OrdinalIgnoreCase)) return current;
-                System.Threading.Thread.Sleep(500);
-            }
-            return null;
-        }
-
-        private static string ChildText(XmlNode node, string localName)
-        {
-            if (node == null) return "";
-            if (String.Equals(node.LocalName, localName, StringComparison.OrdinalIgnoreCase)) return node.InnerText.Trim();
-            for (int i = 0; i < node.ChildNodes.Count; i++)
-            {
-                string value = ChildText(node.ChildNodes[i], localName);
-                if (value.Length > 0) return value;
-            }
-            return "";
-        }
-    }
-
-    internal sealed class BoxStateSnapshot
-    {
-        public string BoxNumber;
-        public string AttachmentStatus;
-        public string OperationStatus;
-        public string OperationStatusText;
-        public string BoxStatus;
-        public string BoxStatusText;
-
-        public string Signature
-        {
-            get { return BoxNumber + "|" + AttachmentStatus + "|" + OperationStatus + "|" + OperationStatusText + "|" + BoxStatus + "|" + BoxStatusText; }
-        }
-
-        public string Summary
-        {
-            get { return "Attachment=" + AttachmentStatus + ", Operation=" + OperationStatus + ", BoxStatus=" + BoxStatus + ", Text=" + BoxStatusText; }
-        }
     }
 
     public sealed class DairyPlanCommandResult

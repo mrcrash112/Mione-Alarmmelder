@@ -33,6 +33,7 @@
     <Compile Include="Core\AlarmHistoryStore.cs" />
     <Compile Include="Core\ExcelAlarmCatalog.cs" />
     <Compile Include="Core\FileMonitorService.cs" /><Compile Include="Core\PropertiesFile.cs" />
+    <Compile Include="Core\AssetCleanup.cs" />
     <Compile Include="Core\FirebaseAuthSession.cs" />
     <Compile Include="Core\FirebaseDefaults.cs" />
     <Compile Include="Core\FirebaseLoginPage.cs" />

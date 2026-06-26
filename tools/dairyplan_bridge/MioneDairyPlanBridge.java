@@ -7,12 +7,7 @@ import RDM_DP.Com.CORBA.PSU_CommandPackage.enum_Box;
 import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_AugerCalibrationCmd;
 import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_BoxCmd;
 import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_RobotPosition;
-import RDM_DP.Com.CORBA.RmsCORBACompManPackage.Device;
-import RDM_DP.Com.CORBA.RmsCORBACompManPackage.DeviceType;
 import RDM_DP.Com.Utils.RdmCompMan;
-import gea.westfaliasurge.ams.rdm.logic.BCUListener;
-import gea.westfaliasurge.ams.rdm.logic.DPPCListener;
-import gea.westfaliasurge.ams.rdm.logic.PSUListener;
 
 public final class MioneDairyPlanBridge {
     private MioneDairyPlanBridge() { }
@@ -26,7 +21,6 @@ public final class MioneDairyPlanBridge {
         RdmCompMan manager = new RdmCompMan();
         try {
             manager.init(ior);
-            initializeListeners(manager);
             execute(manager, command, args);
             refreshLiveData(manager, command);
             System.out.println("OK " + command);
@@ -79,23 +73,6 @@ public final class MioneDairyPlanBridge {
 
     private static PSU_Command psu(RdmCompMan manager) throws Exception { return manager.getPSU(1); }
     private static DPPC_Command dppc(RdmCompMan manager) throws Exception { return manager.getDPPC(1); }
-
-    private static void initializeListeners(RdmCompMan manager) throws Exception {
-        Device[] devices = manager.componentList();
-        for (int i = 0; i < devices.length; i++) {
-            if (devices[i] == null) continue;
-            if (devices[i].type == DeviceType.BCU) {
-                BCUListener listener = new BCUListener(devices[i].iIndex);
-                manager.setBCUListener(listener.boxNumber, listener);
-            }
-            else if (devices[i].type == DeviceType.PSU) {
-                manager.setPSUListener(1, new PSUListener());
-            }
-            else if (devices[i].type == DeviceType.DPPC) {
-                manager.setDPPCListener(1, new DPPCListener());
-            }
-        }
-    }
 
     private static struct_DPB_BoxCmd boxCmd(String[] args) {
         return new struct_DPB_BoxCmd(box(number(value(args, "--box"), "boxNumber")));

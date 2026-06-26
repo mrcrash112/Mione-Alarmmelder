@@ -3,6 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+rm -rf Alarmmelder/bin/Release Alarmmelder/obj/Release
+
 if command -v msbuild >/dev/null 2>&1; then
   msbuild MioneAlarmmelder.sln \
     /t:Rebuild \

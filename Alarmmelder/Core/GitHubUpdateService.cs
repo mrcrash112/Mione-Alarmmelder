@@ -205,10 +205,12 @@ namespace MioneAlarmmelder.Core
         private static void StartPackageReplacement(string packageFolder, string download)
         {
             string target = Application.ExecutablePath; string targetFolder = Path.GetDirectoryName(target);
+            string targetAssets = Path.Combine(targetFolder, "Assets");
             string script = Path.Combine(Path.GetTempPath(), "MioneAlarmmelder-Update-" + Guid.NewGuid().ToString("N") + ".cmd");
             using (StreamWriter writer = new StreamWriter(script, false, Encoding.Default))
             {
                 writer.WriteLine("@echo off"); writer.WriteLine("ping 127.0.0.1 -n 4 >nul");
+                writer.WriteLine("if exist \"" + targetAssets + "\" rmdir /S /Q \"" + targetAssets + "\"");
                 writer.WriteLine("xcopy /E /I /Y \"" + packageFolder + "\\*\" \"" + targetFolder + "\\\" >nul");
                 writer.WriteLine("if errorlevel 1 (pause & exit /b 1)");
                 writer.WriteLine("del /Q \"" + download + "\"");

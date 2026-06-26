@@ -21,7 +21,7 @@ namespace MioneAlarmmelder.Transport
                 string root = NormalizeRoot(settings.DpProcessPath);
                 string rdmJar = Path.Combine(root, "rdm-manager.jar");
                 string ior = Path.Combine(root, @"RDM\CORBA\DP_RDM_COM.ior");
-                string bridgeJar = Path.Combine(AppDirectory(), @"Assets\MioneDairyPlanBridge.jar");
+                string bridgeJar = ResolveBridgeJar(AppDirectory());
                 if (!File.Exists(rdmJar)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "rdm-manager.jar wurde nicht gefunden: " + rdmJar);
                 if (!File.Exists(ior)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "DP_RDM_COM.ior wurde nicht gefunden: " + ior);
                 if (!File.Exists(bridgeJar)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "MioneDairyPlanBridge.jar wurde nicht gefunden: " + bridgeJar);
@@ -113,6 +113,27 @@ namespace MioneAlarmmelder.Transport
         private static string AppDirectory()
         {
             return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        }
+
+        private static string ResolveBridgeJar(string appDirectory)
+        {
+            string assets = Path.Combine(appDirectory, "Assets");
+            string exact = Path.Combine(assets, "MioneDairyPlanBridge.jar");
+            if (!Directory.Exists(assets)) return exact;
+
+            string best = File.Exists(exact) ? exact : "";
+            DateTime bestTime = File.Exists(exact) ? File.GetLastWriteTimeUtc(exact) : DateTime.MinValue;
+            string[] candidates = Directory.GetFiles(assets, "MioneDairyPlanBridge*.jar", SearchOption.TopDirectoryOnly);
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                DateTime candidateTime = File.GetLastWriteTimeUtc(candidates[i]);
+                if (candidateTime > bestTime)
+                {
+                    best = candidates[i];
+                    bestTime = candidateTime;
+                }
+            }
+            return best.Length == 0 ? exact : best;
         }
 
         private static string NormalizeRoot(string path)

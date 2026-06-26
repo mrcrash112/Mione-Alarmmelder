@@ -8,8 +8,6 @@ import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_AugerCalibrationCmd;
 import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_BoxCmd;
 import RDM_DP.Com.CORBA.PSU_CommandPackage.struct_DPB_RobotPosition;
 import RDM_DP.Com.Utils.RdmCompMan;
-import gea.westfaliasurge.ams.rdm.logic.screens.box.BoxStatusManager;
-import gea.westfaliasurge.ams.rdm.logic.session.objects.RdmSession;
 
 public final class MioneDairyPlanBridge {
     private MioneDairyPlanBridge() { }
@@ -33,17 +31,17 @@ public final class MioneDairyPlanBridge {
     private static void execute(RdmCompMan manager, String command, String[] args) throws Exception {
         if ("initializeRobot".equals(command)) { psu(manager).initalizeRobot(); return; }
         if ("initializeSystem".equals(command)) { psu(manager).initializeSystem(); return; }
-        if ("enableBox".equals(command)) { boxStatusManager(manager).executeEnableBox(boxNumber(args)); return; }
-        if ("disableBox".equals(command)) { boxStatusManager(manager).executeDisableBox(boxNumber(args)); return; }
+        if ("enableBox".equals(command)) { psu(manager).enableBox(boxCmd(args)); return; }
+        if ("disableBox".equals(command)) { psu(manager).disableBox(boxCmd(args)); return; }
         if ("startAutomaticOperation".equals(command)) { psu(manager).startAutomaticOperation(); return; }
         if ("stopAutomaticOperation".equals(command)) { psu(manager).stopAutomaticOperation(); return; }
         if ("startSystemCleaning".equals(command)) { psu(manager).startSystemCleaning(); return; }
         if ("stopSystemCleaning".equals(command)) { psu(manager).stopSystemCleaning(); return; }
-        if ("startShortCleaning".equals(command)) { boxStatusManager(manager).executeStartShortCleaning(boxNumber(args)); return; }
-        if ("stopShortCleaning".equals(command)) { boxStatusManager(manager).executeStopShortCleaning(boxNumber(args)); return; }
-        if ("stopMilking".equals(command)) { boxStatusManager(manager).executeStopMilking(boxNumber(args)); return; }
-        if ("setManualMilkingOneBox".equals(command)) { boxStatusManager(manager).executeStartManualMilking(boxNumber(args)); return; }
-        if ("setAutomaticMilkingOneBox".equals(command)) { boxStatusManager(manager).executeStartAutomaticMilking(boxNumber(args)); return; }
+        if ("startShortCleaning".equals(command)) { psu(manager).startShortCleaning(boxCmd(args)); return; }
+        if ("stopShortCleaning".equals(command)) { psu(manager).stopShortCleaning(boxCmd(args)); return; }
+        if ("stopMilking".equals(command)) { psu(manager).stopMilking(boxCmd(args)); return; }
+        if ("setManualMilkingOneBox".equals(command)) { psu(manager).setManualMilkingOneBox(boxCmd(args)); return; }
+        if ("setAutomaticMilkingOneBox".equals(command)) { psu(manager).setAutomaticMilkingOneBox(boxCmd(args)); return; }
         if ("moveRobotToPosition".equals(command)) { psu(manager).moveRobotToPosition(robotPositionCmd(args)); return; }
         if ("startAugerCalibration".equals(command)) { psu(manager).startAugerCalibration(augerCalibrationCmd(args)); return; }
         if ("stopAugerCalibration".equals(command)) { psu(manager).stopAugerCalibration(boxCmd(args)); return; }
@@ -59,19 +57,8 @@ public final class MioneDairyPlanBridge {
     private static PSU_Command psu(RdmCompMan manager) throws Exception { return manager.getPSU(1); }
     private static DPPC_Command dppc(RdmCompMan manager) throws Exception { return manager.getDPPC(1); }
 
-    private static BoxStatusManager boxStatusManager(RdmCompMan manager) {
-        RdmSession session = RdmSession.getInstance();
-        session.rdmCompMan = manager;
-        session.setDPCommandInterfaceInitialized(true);
-        return new BoxStatusManager();
-    }
-
     private static struct_DPB_BoxCmd boxCmd(String[] args) {
         return new struct_DPB_BoxCmd(box(number(value(args, "--box"), "boxNumber")));
-    }
-
-    private static int boxNumber(String[] args) {
-        return number(value(args, "--box"), "boxNumber");
     }
 
     private static struct_DPB_AugerCalibrationCmd augerCalibrationCmd(String[] args) {

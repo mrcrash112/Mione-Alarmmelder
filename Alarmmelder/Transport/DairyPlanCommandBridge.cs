@@ -31,7 +31,7 @@ namespace MioneAlarmmelder.Transport
 
                 BoxStateSnapshot beforeState = RequiresBoxStateConfirmation(command) ? ReadBoxState(command.BoxNumber) : null;
                 string java = FindJava(root);
-                string classPath = rdmJar + Path.PathSeparator + bridgeJar;
+                string classPath = bridgeJar + Path.PathSeparator + rdmJar;
                 string args = "-cp " + Quote(classPath) + " MioneDairyPlanBridge --ior " + Quote(ior) + " --command " + Quote(command.Name) +
                     Optional("--box", command.BoxNumber) + Optional("--robot-position", command.RobotPosition) +
                     Optional("--sampling-box", command.SamplingBox) + Optional("--feeding-type", command.FeedingType);

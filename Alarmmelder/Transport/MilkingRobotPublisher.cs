@@ -11,6 +11,10 @@ namespace MioneAlarmmelder.Transport
     public sealed class MilkingRobotPublisher
     {
         private readonly AppSettings settings;
+        private Dictionary<string, string> translations;
+        private string translationsPath = "";
+        private DateTime translationsStampUtc = DateTime.MinValue;
+        private readonly object translationsLock = new object();
         private static readonly string[] RequiredFiles = new string[]
         {
             "DPProcessControl.exe",
@@ -97,7 +101,7 @@ namespace MioneAlarmmelder.Transport
             return b.ToString();
         }
 
-        private static string BuildBoxesJson()
+        private string BuildBoxesJson()
         {
             StringBuilder b = new StringBuilder();
             b.Append('{');
@@ -255,7 +259,7 @@ namespace MioneAlarmmelder.Transport
             b.Append(']');
         }
 
-        private static MilkingRobotBoxInfo[] FetchBoxInfos()
+        private MilkingRobotBoxInfo[] FetchBoxInfos()
         {
             try
             {
@@ -287,18 +291,23 @@ namespace MioneAlarmmelder.Transport
             catch { return new MilkingRobotBoxInfo[0]; }
         }
 
-        private static MilkingRobotBoxInfo ReadBoxInfo(XmlNode node)
+        private MilkingRobotBoxInfo ReadBoxInfo(XmlNode node)
         {
+            string operationStatus = ChildTextAny(node, "OperationStatus", "operationStatus", "OperationState", "operationState");
+            string operationStatusText = ResolveOperationStatusText(operationStatus, ChildTextAny(node, "OperationStatusText", "operationStatusText", "OperationText", "operationText"));
+            string boxStatus = ChildTextAny(node, "BoxStatus", "boxStatus");
+            string boxStatusText = ResolveBoxStatusText(boxStatus, ChildTextAny(node, "BoxStatusText", "boxStatusText"));
+            if (boxStatusText.Length == 0) boxStatusText = ResolveBoxStatusText(boxStatus, ChildTextAny(node, "BoxStatus", "boxStatus"));
             return new MilkingRobotBoxInfo
             {
                 Source = "RdmDataService/BoxInfos",
                 BoxNumber = ChildText(node, "BoxNumber"),
                 CowNumber = ChildText(node, "CowNumber"),
                 AttachmentStatus = ChildText(node, "AttachmentStatus"),
-                OperationStatus = ChildTextAny(node, "OperationStatus", "operationStatus", "OperationState", "operationState"),
-                OperationStatusText = ChildTextAny(node, "OperationStatusText", "operationStatusText", "OperationText", "operationText"),
-                BoxStatus = ChildTextAny(node, "BoxStatus", "boxStatus"),
-                BoxStatusText = ChildTextAny(node, "BoxStatusText", "boxStatusText", "BoxStatus", "boxStatus"),
+                OperationStatus = operationStatus,
+                OperationStatusText = operationStatusText,
+                BoxStatus = boxStatus,
+                BoxStatusText = boxStatusText,
                 ExpectedMilkYield = ChildText(node, "ExpectedMilkYield"),
                 MilkYield = ChildText(node, "MilkYield")
             };
@@ -330,6 +339,177 @@ namespace MioneAlarmmelder.Transport
         {
             if (!File.Exists(path)) return new Dictionary<string, string>();
             return PropertiesFile.Read(path);
+        }
+
+        private Dictionary<string, string> LoadTranslations()
+        {
+            string path = settings == null ? "" : settings.TranslationPath;
+            if (String.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            DateTime stamp = File.GetLastWriteTimeUtc(path);
+            lock (translationsLock)
+            {
+                if (translations == null || !String.Equals(path, translationsPath, StringComparison.OrdinalIgnoreCase) || stamp != translationsStampUtc)
+                {
+                    translations = PropertiesFile.Read(path);
+                    translationsPath = path;
+                    translationsStampUtc = stamp;
+                }
+                return translations;
+            }
+        }
+
+        private string Translate(string key)
+        {
+            if (String.IsNullOrEmpty(key)) return "";
+            Dictionary<string, string> values = LoadTranslations();
+            string value;
+            return values.TryGetValue(key, out value) ? value : "";
+        }
+
+        private string ResolveOperationStatusText(string rawValue, string existingText)
+        {
+            string text = Trim(existingText);
+            if (text.Length > 0) return text;
+
+            string raw = Trim(rawValue);
+            if (raw.Length == 0) return "";
+
+            string translated = Translate("Text.Enum.BoxOperationState." + ResolveOperationStateKey(raw));
+            if (translated.Length > 0) return translated;
+
+            return raw;
+        }
+
+        private string ResolveBoxStatusText(string rawValue, string existingText)
+        {
+            string text = Trim(existingText);
+            if (text.Length > 0) return text;
+
+            string raw = Trim(rawValue);
+            if (raw.Length == 0) return "";
+
+            string translated = Translate("Text.Enum.BoxStatus." + ResolveBoxStatusKey(raw));
+            if (translated.Length > 0) return translated;
+
+            return raw;
+        }
+
+        private static string ResolveOperationStateKey(string rawValue)
+        {
+            int code;
+            if (Int32.TryParse(rawValue, out code))
+            {
+                switch (code)
+                {
+                    case 0: return "Offline";
+                    case 1: return "Initialize";
+                    case 2: return "Idle";
+                    case 3: return "Manual";
+                    case 4: return "Automatic";
+                    case 5: return "Emergency";
+                    case 6: return "EmergencyStop";
+                    case 7: return "Error";
+                }
+            }
+
+            switch (NormalizeToken(rawValue))
+            {
+                case "OFFLINE": return "Offline";
+                case "INIT":
+                case "INITIALIZE":
+                case "INITIALISING":
+                case "INITIALIZING": return "Initialize";
+                case "IDLE": return "Idle";
+                case "MANUAL": return "Manual";
+                case "AUTOMATIC": return "Automatic";
+                case "EMERGENCY": return "Emergency";
+                case "EMERGENCYSTOP": return "EmergencyStop";
+                case "ERROR": return "Error";
+            }
+
+            return rawValue;
+        }
+
+        private static string ResolveBoxStatusKey(string rawValue)
+        {
+            int code;
+            if (Int32.TryParse(rawValue, out code))
+            {
+                switch (code)
+                {
+                    case 0: return "OOO";
+                    case 1: return "Initializing";
+                    case 2: return "Blocked";
+                    case 3: return "RequestEntranceGate";
+                    case 4: return "OpenEntranceGate";
+                    case 5: return "WaitForCow";
+                    case 6: return "CowIdentified";
+                    case 7: return "ClaimRobot";
+                    case 8: return "WaitForRobot";
+                    case 9: return "TakeCluster";
+                    case 10: return "StartAttachment";
+                    case 11: return "ManualAttachment";
+                    case 12: return "FinishAttachment";
+                    case 13: return "Milking";
+                    case 14: return "DetachCluster";
+                    case 15: return "ReleaseCow";
+                    case 16: return "ShortClean";
+                    case 17: return "Cleaning";
+                    case 18: return "Disabled";
+                    case 19: return "Unknown";
+                }
+            }
+
+            switch (NormalizeToken(rawValue))
+            {
+                case "OOO": return "OOO";
+                case "INITIALISING":
+                case "INITIALIZING":
+                case "INIT": return "Initializing";
+                case "BLOCKED": return "Blocked";
+                case "REQUESTENTRANCEGATE": return "RequestEntranceGate";
+                case "OPENENTRANCEGATE": return "OpenEntranceGate";
+                case "WAITFORCOW": return "WaitForCow";
+                case "COWIDENTIFIED": return "CowIdentified";
+                case "CLAIMROBOT": return "ClaimRobot";
+                case "WAITFORROBOT": return "WaitForRobot";
+                case "TAKECLUSTER": return "TakeCluster";
+                case "STARTATTACHMENT": return "StartAttachment";
+                case "MANUALATTACHMENT": return "ManualAttachment";
+                case "FINISHATTACHMENT": return "FinishAttachment";
+                case "MILKING": return "Milking";
+                case "DEATACHCLUSTER":
+                case "DETACHCLUSTER": return "DetachCluster";
+                case "RELEASECOW": return "ReleaseCow";
+                case "SHORTCLEAN":
+                case "SHORTCLEANING": return "ShortClean";
+                case "CLEANING": return "Cleaning";
+                case "DISABLED": return "Disabled";
+                case "UNKNOWN": return "Unknown";
+            }
+
+            return rawValue;
+        }
+
+        private static string NormalizeToken(string value)
+        {
+            if (String.IsNullOrEmpty(value)) return "";
+            StringBuilder b = new StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (Char.IsLetterOrDigit(c)) b.Append(Char.ToUpperInvariant(c));
+            }
+            return b.ToString();
+        }
+
+        private static string Trim(string value)
+        {
+            return String.IsNullOrEmpty(value) ? "" : value.Trim();
         }
 
         private static string ReadText(string path, int maximumCharacters)

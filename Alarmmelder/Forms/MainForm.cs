@@ -799,7 +799,8 @@ namespace MioneAlarmmelder.Forms
             Rectangle bounds = tabs.GetTabRect(e.Index);
             Color color = e.Index == 0 && overviewUpdateHighlight ? Color.Gold : (e.Index == tabs.SelectedIndex ? Color.White : SystemColors.Control);
             using (Brush brush = new SolidBrush(color)) e.Graphics.FillRectangle(brush, bounds);
-            TextRenderer.DrawText(e.Graphics, tabs.TabPages[e.Index].Text, Font, bounds, Color.Black, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            Rectangle textBounds = new Rectangle(bounds.Left + 8, bounds.Top, bounds.Width - 10, bounds.Height);
+            TextRenderer.DrawText(e.Graphics, tabs.TabPages[e.Index].Text, Font, textBounds, Color.Black, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
         private void SetTransportStatus(Panel panel, Label label, string name, string text, MonitorState state)
         {

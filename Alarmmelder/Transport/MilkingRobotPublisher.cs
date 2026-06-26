@@ -295,13 +295,23 @@ namespace MioneAlarmmelder.Transport
                 BoxNumber = ChildText(node, "BoxNumber"),
                 CowNumber = ChildText(node, "CowNumber"),
                 AttachmentStatus = ChildText(node, "AttachmentStatus"),
-                OperationStatus = ChildText(node, "OperationStatus"),
-                OperationStatusText = ChildText(node, "OperationStatusText"),
-                BoxStatus = ChildText(node, "BoxStatus"),
-                BoxStatusText = ChildText(node, "BoxStatusText"),
+                OperationStatus = ChildTextAny(node, "OperationStatus", "operationStatus", "OperationState", "operationState"),
+                OperationStatusText = ChildTextAny(node, "OperationStatusText", "operationStatusText", "OperationText", "operationText"),
+                BoxStatus = ChildTextAny(node, "BoxStatus", "boxStatus"),
+                BoxStatusText = ChildTextAny(node, "BoxStatusText", "boxStatusText", "BoxStatus", "boxStatus"),
                 ExpectedMilkYield = ChildText(node, "ExpectedMilkYield"),
                 MilkYield = ChildText(node, "MilkYield")
             };
+        }
+
+        private static string ChildTextAny(XmlNode node, params string[] names)
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                string value = ChildText(node, names[i]);
+                if (!String.IsNullOrEmpty(value)) return value;
+            }
+            return "";
         }
 
         private static string ChildText(XmlNode node, string localName)

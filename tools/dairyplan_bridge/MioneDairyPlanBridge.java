@@ -63,35 +63,11 @@ public final class MioneDairyPlanBridge {
 
     private static void refreshLiveData(RdmCompMan manager, String command) {
         try {
-            if (isPsuCommand(command)) {
-                psu(manager).sendParameters();
-            }
             if (isDppcCommand(command)) {
                 dppc(manager).updateAreaCounterXMLFile();
             }
         } catch (Throwable ignored) {
         }
-    }
-
-    private static boolean isPsuCommand(String command) {
-        return "initializeRobot".equals(command) ||
-            "initializeSystem".equals(command) ||
-            "enableBox".equals(command) ||
-            "disableBox".equals(command) ||
-            "startAutomaticOperation".equals(command) ||
-            "stopAutomaticOperation".equals(command) ||
-            "startSystemCleaning".equals(command) ||
-            "stopSystemCleaning".equals(command) ||
-            "startShortCleaning".equals(command) ||
-            "stopShortCleaning".equals(command) ||
-            "stopMilking".equals(command) ||
-            "setManualMilkingOneBox".equals(command) ||
-            "setAutomaticMilkingOneBox".equals(command) ||
-            "moveRobotToPosition".equals(command) ||
-            "startAugerCalibration".equals(command) ||
-            "stopAugerCalibration".equals(command) ||
-            "startPreparationWaterTanks".equals(command) ||
-            "resetAlarm".equals(command);
     }
 
     private static boolean isDppcCommand(String command) {

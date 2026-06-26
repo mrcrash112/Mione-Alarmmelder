@@ -69,12 +69,13 @@ namespace MioneAlarmmelder.Transport
         public void Publish()
         {
             if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
-            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(), true);
-            MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(), true);
+            MilkingRobotBoxInfo[] boxes = FetchBoxInfos();
+            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(boxes), true);
+            MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
             MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
-        private string BuildSnapshotJson()
+        private string BuildSnapshotJson(MilkingRobotBoxInfo[] boxes)
         {
             string root = NormalizeRoot(settings.DpProcessPath);
             MilkingRobotFileCheck[] checks = CheckFiles(root);
@@ -94,20 +95,20 @@ namespace MioneAlarmmelder.Transport
             AddObject(b, "amsCleaning", ReadProperties(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"))); b.Append(',');
             Add(b, "areaCountersXml", ReadText(Path.Combine(root, "AreaCounters.xml"), 24000)); b.Append(',');
             Add(b, "robotCurrentCoordinatesCsv", ReadText(Path.Combine(root, "RobotCurrentCoordinates.csv"), 24000)); b.Append(',');
-            AppendBoxes(b, FetchBoxInfos());
+            AppendBoxes(b, boxes);
             b.Append("},");
             AppendFunctions(b);
             b.Append('}');
             return b.ToString();
         }
 
-        private string BuildBoxesJson()
+        private string BuildBoxesJson(MilkingRobotBoxInfo[] boxes)
         {
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboterBoxen"); b.Append(',');
             Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
-            AppendBoxes(b, FetchBoxInfos());
+            AppendBoxes(b, boxes);
             b.Append('}');
             return b.ToString();
         }

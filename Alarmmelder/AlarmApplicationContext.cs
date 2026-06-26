@@ -224,6 +224,27 @@ namespace MioneAlarmmelder
         private void MilkingRobotCommandReceived(object sender, MilkingRobotCommandEventArgs e)
         {
             main.AddMilkingRobotCommand(e);
+            if (e != null && e.Ok) RequestMilkingRobotRefresh();
+        }
+
+        private void RequestMilkingRobotRefresh()
+        {
+            if (milkingRobotPublisher == null) return;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Thread.Sleep(750);
+                for (int i = 0; i < 20; i++)
+                {
+                    if (Interlocked.Exchange(ref milkingRobotPending, 1) == 0)
+                    {
+                        try { milkingRobotPublisher.Publish(); }
+                        catch (Exception ex) { ErrorLogger.Log("Melkroboter-MQTT", ex); }
+                        finally { Interlocked.Exchange(ref milkingRobotPending, 0); }
+                        return;
+                    }
+                    Thread.Sleep(250);
+                }
+            });
         }
         private void MilkingRobotTick(object state)
         {

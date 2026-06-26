@@ -26,6 +26,8 @@ namespace MioneAlarmmelder.Transport
         {
             { "initializeRobot", "Roboter initialisieren", "PSU_Command.initializeRobot", "" },
             { "initializeSystem", "System initialisieren", "PSU_Command.initializeSystem", "" },
+            { "enableBox", "Automatik Eingangstor", "PSU_Command.enableBox", "boxNumber" },
+            { "disableBox", "Eingangstor schließen", "PSU_Command.disableBox", "boxNumber" },
             { "startAutomaticOperation", "Automatikbetrieb starten", "PSU_Command.startAutomaticOperation", "" },
             { "stopAutomaticOperation", "Automatikbetrieb stoppen", "PSU_Command.stopAutomaticOperation", "" },
             { "startSystemCleaning", "Systemreinigung starten", "PSU_Command.startSystemCleaning", "" },

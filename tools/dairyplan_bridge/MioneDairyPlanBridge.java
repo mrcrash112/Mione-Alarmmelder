@@ -31,6 +31,8 @@ public final class MioneDairyPlanBridge {
     private static void execute(RdmCompMan manager, String command, String[] args) throws Exception {
         if ("initializeRobot".equals(command)) { psu(manager).initalizeRobot(); return; }
         if ("initializeSystem".equals(command)) { psu(manager).initializeSystem(); return; }
+        if ("enableBox".equals(command)) { psu(manager).enableBox(boxCmd(args)); return; }
+        if ("disableBox".equals(command)) { psu(manager).disableBox(boxCmd(args)); return; }
         if ("startAutomaticOperation".equals(command)) { psu(manager).startAutomaticOperation(); return; }
         if ("stopAutomaticOperation".equals(command)) { psu(manager).stopAutomaticOperation(); return; }
         if ("startSystemCleaning".equals(command)) { psu(manager).startSystemCleaning(); return; }

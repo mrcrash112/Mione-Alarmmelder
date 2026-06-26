@@ -28,6 +28,10 @@ public final class MioneDairyPlanBridge {
             manager.init(ior);
             initializeListeners(manager);
             execute(manager, command, args);
+            try {
+                manager.reset();
+            } catch (Throwable ignored) {
+            }
             System.out.println("OK " + command);
         } finally {
             try { manager.shutDown(); } catch (Throwable ignored) { }

@@ -250,9 +250,7 @@ namespace MioneAlarmmelder.Transport
                 Add(b, "cowNumber", boxes[i].CowNumber); b.Append(',');
                 Add(b, "attachmentStatus", boxes[i].AttachmentStatus); b.Append(',');
                 Add(b, "operationStatus", boxes[i].OperationStatus); b.Append(',');
-                Add(b, "operationStatusText", boxes[i].OperationStatusText); b.Append(',');
                 Add(b, "boxStatus", boxes[i].BoxStatus); b.Append(',');
-                Add(b, "boxStatusText", boxes[i].BoxStatusText); b.Append(',');
                 Add(b, "expectedMilkYield", boxes[i].ExpectedMilkYield); b.Append(',');
                 Add(b, "milkYield", boxes[i].MilkYield);
                 b.Append('}');

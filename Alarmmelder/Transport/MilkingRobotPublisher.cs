@@ -12,10 +12,13 @@ namespace MioneAlarmmelder.Transport
     {
         private readonly AppSettings settings;
         private readonly object snapshotLock = new object();
+        private readonly object publishLock = new object();
         private Dictionary<string, string> translations;
         private string translationsPath = "";
         private DateTime translationsStampUtc = DateTime.MinValue;
         private readonly object translationsLock = new object();
+        private string lastPublishKey = "";
+        private bool functionsPublished;
         private readonly FileCache<string> runningCache = new FileCache<string>();
         private readonly FileCache<string> pidCache = new FileCache<string>();
         private readonly FileCache<Dictionary<string, string>> amsStatusCache = new FileCache<Dictionary<string, string>>();
@@ -78,9 +81,24 @@ namespace MioneAlarmmelder.Transport
         {
             if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
             MilkingRobotBoxInfo[] boxes = FetchBoxInfos();
+            string publishKey = BuildPublishKey(boxes);
+            bool publishFunctions = false;
+            lock (publishLock)
+            {
+                if (String.Equals(publishKey, lastPublishKey, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                lastPublishKey = publishKey;
+                if (!functionsPublished)
+                {
+                    functionsPublished = true;
+                    publishFunctions = true;
+                }
+            }
             MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(boxes), true);
             MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
-            MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
+            if (publishFunctions) MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
         private string BuildSnapshotJson(MilkingRobotBoxInfo[] boxes)
@@ -264,6 +282,49 @@ namespace MioneAlarmmelder.Transport
                 b.Append('}');
             }
             b.Append(']');
+        }
+
+        private string BuildPublishKey(MilkingRobotBoxInfo[] boxes)
+        {
+            StringBuilder b = new StringBuilder();
+            string root = NormalizeRoot(settings.DpProcessPath);
+            b.Append(root).Append('|');
+            AppendStamp(b, Path.Combine(root, @"RDM\running.tdm"));
+            AppendStamp(b, Path.Combine(root, @"RDM\pid.tdm"));
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"));
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"));
+            AppendStamp(b, Path.Combine(root, "AreaCounters.xml"));
+            AppendStamp(b, Path.Combine(root, "RobotCurrentCoordinates.csv"));
+            AppendBoxesSignature(b, boxes);
+            return b.ToString();
+        }
+
+        private static void AppendStamp(StringBuilder b, string path)
+        {
+            b.Append(File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : 0).Append('|');
+        }
+
+        private static void AppendBoxesSignature(StringBuilder b, MilkingRobotBoxInfo[] boxes)
+        {
+            if (boxes == null)
+            {
+                b.Append("boxes:0|");
+                return;
+            }
+            b.Append("boxes:").Append(boxes.Length).Append('|');
+            for (int i = 0; i < boxes.Length; i++)
+            {
+                MilkingRobotBoxInfo box = boxes[i];
+                if (box == null)
+                {
+                    b.Append("null|");
+                    continue;
+                }
+                b.Append(box.Source).Append('|').Append(box.BoxNumber).Append('|').Append(box.CowNumber).Append('|');
+                b.Append(box.AttachmentStatus).Append('|').Append(box.OperationStatus).Append('|').Append(box.OperationStatusText).Append('|');
+                b.Append(box.BoxStatus).Append('|').Append(box.BoxStatusText).Append('|').Append(box.ExpectedMilkYield).Append('|').Append(box.MilkYield).Append('|');
+            }
         }
 
         private MilkingRobotBoxInfo[] FetchBoxInfos()

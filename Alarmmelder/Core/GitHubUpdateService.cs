@@ -97,10 +97,10 @@ namespace MioneAlarmmelder.Core
             string assetName = Value(selected, "name");
             string versionText = beta ? ExtractVersionFromAsset(assetName) : tag;
             Version version = ParseVersion(versionText);
-            bool candidateBeta = versionText.IndexOf("_Beta", StringComparison.OrdinalIgnoreCase) >= 0 || beta;
             UpdateCheckResult result = new UpdateCheckResult(); result.TagName = versionText; result.LatestVersion = version; result.Channel = beta ? "beta" : "stable";
             int compare = version.CompareTo(CurrentVersion);
-            result.HasUpdate = compare > 0 || (compare == 0 && CurrentIsBeta && !candidateBeta);
+            if (beta) result.HasUpdate = compare > 0 || (compare == 0 && !CurrentIsBeta);
+            else result.HasUpdate = compare > 0 || (compare == 0 && CurrentIsBeta);
             if (!result.HasUpdate) return result;
             result.AssetName = assetName; result.DownloadUrl = Value(selected, "browser_download_url"); result.Digest = Value(selected, "digest");
             result.IsZip = result.AssetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
@@ -205,10 +205,14 @@ namespace MioneAlarmmelder.Core
         private static void StartPackageReplacement(string packageFolder, string download)
         {
             string target = Application.ExecutablePath; string targetFolder = Path.GetDirectoryName(target);
+            string targetAssets = Path.Combine(targetFolder, "Assets");
             string script = Path.Combine(Path.GetTempPath(), "MioneAlarmmelder-Update-" + Guid.NewGuid().ToString("N") + ".cmd");
             using (StreamWriter writer = new StreamWriter(script, false, Encoding.Default))
             {
                 writer.WriteLine("@echo off"); writer.WriteLine("ping 127.0.0.1 -n 4 >nul");
+                writer.WriteLine("if exist \"" + targetAssets + "\\MioneDairyPlanBridge*.jar\" del /Q \"" + targetAssets + "\\MioneDairyPlanBridge*.jar\"");
+                writer.WriteLine("if exist \"" + targetAssets + "\\translations_de*.properties\" del /Q \"" + targetAssets + "\\translations_de*.properties\"");
+                writer.WriteLine("if exist \"" + targetAssets + "\\Mione_AlarmCodes_UK_DE*.xlsx\" del /Q \"" + targetAssets + "\\Mione_AlarmCodes_UK_DE*.xlsx\"");
                 writer.WriteLine("xcopy /E /I /Y \"" + packageFolder + "\\*\" \"" + targetFolder + "\\\" >nul");
                 writer.WriteLine("if errorlevel 1 (pause & exit /b 1)");
                 writer.WriteLine("del /Q \"" + download + "\"");

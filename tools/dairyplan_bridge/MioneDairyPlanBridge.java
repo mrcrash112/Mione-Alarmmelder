@@ -22,6 +22,7 @@ public final class MioneDairyPlanBridge {
         try {
             manager.init(ior);
             execute(manager, command, args);
+            refreshLiveData(manager, command);
             System.out.println("OK " + command);
         } finally {
             try { manager.shutDown(); } catch (Throwable ignored) { }
@@ -31,6 +32,8 @@ public final class MioneDairyPlanBridge {
     private static void execute(RdmCompMan manager, String command, String[] args) throws Exception {
         if ("initializeRobot".equals(command)) { psu(manager).initalizeRobot(); return; }
         if ("initializeSystem".equals(command)) { psu(manager).initializeSystem(); return; }
+        if ("enableBox".equals(command)) { psu(manager).enableBox(boxCmd(args)); return; }
+        if ("disableBox".equals(command)) { psu(manager).disableBox(boxCmd(args)); return; }
         if ("startAutomaticOperation".equals(command)) { psu(manager).startAutomaticOperation(); return; }
         if ("stopAutomaticOperation".equals(command)) { psu(manager).stopAutomaticOperation(); return; }
         if ("startSystemCleaning".equals(command)) { psu(manager).startSystemCleaning(); return; }
@@ -50,6 +53,22 @@ public final class MioneDairyPlanBridge {
         if ("pauseSampling".equals(command)) { dppc(manager).pauseSampling(samplingCmd(args)); return; }
         if ("resumeSampling".equals(command)) { dppc(manager).resumeSampling(samplingCmd(args)); return; }
         throw new IllegalArgumentException("Unbekannte Funktion: " + command);
+    }
+
+    private static void refreshLiveData(RdmCompMan manager, String command) {
+        try {
+            if (isDppcCommand(command)) {
+                dppc(manager).updateAreaCounterXMLFile();
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static boolean isDppcCommand(String command) {
+        return "startSamplingSession".equals(command) ||
+            "stopSamplingSession".equals(command) ||
+            "pauseSampling".equals(command) ||
+            "resumeSampling".equals(command);
     }
 
     private static PSU_Command psu(RdmCompMan manager) throws Exception { return manager.getPSU(1); }

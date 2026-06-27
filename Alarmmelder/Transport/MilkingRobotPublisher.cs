@@ -11,6 +11,18 @@ namespace MioneAlarmmelder.Transport
     public sealed class MilkingRobotPublisher
     {
         private readonly AppSettings settings;
+        private readonly object publishLock = new object();
+        private readonly object cacheLock = new object();
+        private Dictionary<string, string> translations;
+        private string translationsPath = "";
+        private DateTime translationsStampUtc = DateTime.MinValue;
+        private readonly object translationsLock = new object();
+        private string lastBoxSignature = "";
+        private string lastSystemSignature = "";
+        private bool functionsPublished;
+        private readonly FileCache<Dictionary<string, string>> amsStatusCache = new FileCache<Dictionary<string, string>>();
+        private readonly FileCache<Dictionary<string, string>> systemCleaningCache = new FileCache<Dictionary<string, string>>();
+        private readonly FileCache<Dictionary<string, string>> amsCleaningCache = new FileCache<Dictionary<string, string>>();
         private static readonly string[] RequiredFiles = new string[]
         {
             "DPProcessControl.exe",
@@ -26,6 +38,8 @@ namespace MioneAlarmmelder.Transport
         {
             { "initializeRobot", "Roboter initialisieren", "PSU_Command.initializeRobot", "" },
             { "initializeSystem", "System initialisieren", "PSU_Command.initializeSystem", "" },
+            { "enableBox", "Automatik Eingangstor", "PSU_Command.enableBox", "boxNumber" },
+            { "disableBox", "Eingangstor schließen", "PSU_Command.disableBox", "boxNumber" },
             { "startAutomaticOperation", "Automatikbetrieb starten", "PSU_Command.startAutomaticOperation", "" },
             { "stopAutomaticOperation", "Automatikbetrieb stoppen", "PSU_Command.stopAutomaticOperation", "" },
             { "startSystemCleaning", "Systemreinigung starten", "PSU_Command.startSystemCleaning", "" },
@@ -62,49 +76,82 @@ namespace MioneAlarmmelder.Transport
 
         public void Publish()
         {
-            if (!settings.DpProcessEnabled || !settings.MqttEnabled || String.IsNullOrEmpty(settings.MqttUser)) return;
-            string topic = settings.MqttUser.Trim().Trim('/') + "/Melkroboter";
-            string functionsTopic = topic + "/Funktionen";
-            string boxesTopic = topic + "/Boxen";
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, topic, BuildSnapshotJson(), true);
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, boxesTopic, BuildBoxesJson(), true);
-            MqttPublisher.Publish(settings.MqttHost, settings.MqttPort, settings.MqttUser, settings.MqttPassword, functionsTopic, BuildFunctionsJson(), true);
+            if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
+            string root = NormalizeRoot(settings.DpProcessPath);
+            MilkingRobotBoxInfo[] boxes = FetchBoxInfos();
+            string boxSignature = BuildBoxSignature(boxes);
+            string systemSignature = BuildSystemSignature(root);
+            bool publishBoxes = false;
+            bool publishSystem = false;
+            bool publishFunctions = false;
+            lock (publishLock)
+            {
+                if (!String.Equals(boxSignature, lastBoxSignature, StringComparison.Ordinal))
+                {
+                    lastBoxSignature = boxSignature;
+                    publishBoxes = true;
+                }
+                if (!String.Equals(systemSignature, lastSystemSignature, StringComparison.Ordinal))
+                {
+                    lastSystemSignature = systemSignature;
+                    publishSystem = true;
+                }
+                if (!publishBoxes && !publishSystem && functionsPublished) return;
+                if (!functionsPublished)
+                {
+                    functionsPublished = true;
+                    publishFunctions = true;
+                }
+            }
+            if (publishBoxes)
+            {
+                MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(root, boxes), true);
+                MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
+            }
+            if (publishSystem)
+            {
+                MqttRoutePublisher.Publish(settings, "Melkroboter/System", BuildSystemJson(root), true);
+            }
+            if (publishFunctions) MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
-        private string BuildSnapshotJson()
+        private string BuildSnapshotJson(string root, MilkingRobotBoxInfo[] boxes)
         {
-            string root = NormalizeRoot(settings.DpProcessPath);
             MilkingRobotFileCheck[] checks = CheckFiles(root);
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboter"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
             Add(b, "dairyPlanPath", root); b.Append(',');
             b.Append("\"communicationEnabled\":").Append(settings.DpProcessEnabled ? "true" : "false").Append(',');
             b.Append("\"communicationReady\":").Append(AllFound(checks) ? "true" : "false").Append(',');
             AppendChecks(b, checks); b.Append(',');
             b.Append("\"data\":{");
-            Add(b, "rdmRunning", ReadText(Path.Combine(root, @"RDM\running.tdm"), 400)); b.Append(',');
-            Add(b, "rdmPid", ReadText(Path.Combine(root, @"RDM\pid.tdm"), 80)); b.Append(',');
-            AddObject(b, "amsStatus", ReadProperties(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"))); b.Append(',');
-            AddObject(b, "systemCleaning", ReadProperties(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"))); b.Append(',');
-            AddObject(b, "amsCleaning", ReadProperties(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"))); b.Append(',');
-            Add(b, "areaCountersXml", ReadText(Path.Combine(root, "AreaCounters.xml"), 24000)); b.Append(',');
-            Add(b, "robotCurrentCoordinatesCsv", ReadText(Path.Combine(root, "RobotCurrentCoordinates.csv"), 24000)); b.Append(',');
-            AppendBoxes(b, FetchBoxInfos());
+            AddObject(b, "amsStatus", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"), amsStatusCache)); b.Append(',');
+            AddObject(b, "amsCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"), amsCleaningCache)); b.Append(',');
+            AppendBoxes(b, boxes);
             b.Append("},");
             AppendFunctions(b);
             b.Append('}');
             return b.ToString();
         }
 
-        private static string BuildBoxesJson()
+        private string BuildSystemJson(string root)
+        {
+            StringBuilder b = new StringBuilder();
+            b.Append('{');
+            Add(b, "type", "melkroboterSystem"); b.Append(',');
+            Add(b, "dairyPlanPath", root); b.Append(',');
+            AddObject(b, "systemCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"), systemCleaningCache));
+            b.Append('}');
+            return b.ToString();
+        }
+
+        private string BuildBoxesJson(MilkingRobotBoxInfo[] boxes)
         {
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboterBoxen"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
-            AppendBoxes(b, FetchBoxInfos());
+            AppendBoxes(b, boxes);
             b.Append('}');
             return b.ToString();
         }
@@ -114,9 +161,8 @@ namespace MioneAlarmmelder.Transport
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboterFunctions"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
-            Add(b, "commandTopic", "<mqtt_benutzername>/Melkroboter/Command"); b.Append(',');
-            Add(b, "resultTopic", "<mqtt_benutzername>/Melkroboter/Result"); b.Append(',');
+            Add(b, "commandTopic", "<firebase_system_id>/Melkroboter/Command"); b.Append(',');
+            Add(b, "resultTopic", "<firebase_system_id>/Melkroboter/Result"); b.Append(',');
             Add(b, "commandExample", "{\"requestId\":\"1\",\"command\":\"stopMilking\",\"boxNumber\":1}"); b.Append(',');
             AppendFunctions(b);
             b.Append('}');
@@ -246,9 +292,7 @@ namespace MioneAlarmmelder.Transport
                 Add(b, "cowNumber", boxes[i].CowNumber); b.Append(',');
                 Add(b, "attachmentStatus", boxes[i].AttachmentStatus); b.Append(',');
                 Add(b, "operationStatus", boxes[i].OperationStatus); b.Append(',');
-                Add(b, "operationStatusText", boxes[i].OperationStatusText); b.Append(',');
                 Add(b, "boxStatus", boxes[i].BoxStatus); b.Append(',');
-                Add(b, "boxStatusText", boxes[i].BoxStatusText); b.Append(',');
                 Add(b, "expectedMilkYield", boxes[i].ExpectedMilkYield); b.Append(',');
                 Add(b, "milkYield", boxes[i].MilkYield);
                 b.Append('}');
@@ -256,7 +300,49 @@ namespace MioneAlarmmelder.Transport
             b.Append(']');
         }
 
-        private static MilkingRobotBoxInfo[] FetchBoxInfos()
+        private string BuildBoxSignature(MilkingRobotBoxInfo[] boxes)
+        {
+            StringBuilder b = new StringBuilder();
+            AppendBoxesSignature(b, boxes);
+            return b.ToString();
+        }
+
+        private string BuildSystemSignature(string root)
+        {
+            StringBuilder b = new StringBuilder();
+            b.Append(root).Append('|');
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
+            return b.ToString();
+        }
+
+        private static void AppendStamp(StringBuilder b, string path)
+        {
+            b.Append(File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : 0).Append('|');
+        }
+
+        private static void AppendBoxesSignature(StringBuilder b, MilkingRobotBoxInfo[] boxes)
+        {
+            if (boxes == null)
+            {
+                b.Append("boxes:0|");
+                return;
+            }
+            b.Append("boxes:").Append(boxes.Length).Append('|');
+            for (int i = 0; i < boxes.Length; i++)
+            {
+                MilkingRobotBoxInfo box = boxes[i];
+                if (box == null)
+                {
+                    b.Append("null|");
+                    continue;
+                }
+                b.Append(box.Source).Append('|').Append(box.BoxNumber).Append('|').Append(box.CowNumber).Append('|');
+                b.Append(box.AttachmentStatus).Append('|').Append(box.OperationStatus).Append('|').Append(box.OperationStatusText).Append('|');
+                b.Append(box.BoxStatus).Append('|').Append(box.BoxStatusText).Append('|').Append(box.ExpectedMilkYield).Append('|').Append(box.MilkYield).Append('|');
+            }
+        }
+
+        private MilkingRobotBoxInfo[] FetchBoxInfos()
         {
             try
             {
@@ -288,21 +374,36 @@ namespace MioneAlarmmelder.Transport
             catch { return new MilkingRobotBoxInfo[0]; }
         }
 
-        private static MilkingRobotBoxInfo ReadBoxInfo(XmlNode node)
+        private MilkingRobotBoxInfo ReadBoxInfo(XmlNode node)
         {
+            string operationStatus = ChildTextAny(node, "OperationStatus", "operationStatus", "OperationState", "operationState");
+            string operationStatusText = ResolveOperationStatusText(operationStatus, ChildTextAny(node, "OperationStatusText", "operationStatusText", "OperationText", "operationText"));
+            string boxStatus = ChildTextAny(node, "BoxStatus", "boxStatus");
+            string boxStatusText = ResolveBoxStatusText(boxStatus, ChildTextAny(node, "BoxStatusText", "boxStatusText"));
+            if (boxStatusText.Length == 0) boxStatusText = ResolveBoxStatusText(boxStatus, ChildTextAny(node, "BoxStatus", "boxStatus"));
             return new MilkingRobotBoxInfo
             {
                 Source = "RdmDataService/BoxInfos",
                 BoxNumber = ChildText(node, "BoxNumber"),
                 CowNumber = ChildText(node, "CowNumber"),
                 AttachmentStatus = ChildText(node, "AttachmentStatus"),
-                OperationStatus = ChildText(node, "OperationStatus"),
-                OperationStatusText = ChildText(node, "OperationStatusText"),
-                BoxStatus = ChildText(node, "BoxStatus"),
-                BoxStatusText = ChildText(node, "BoxStatusText"),
+                OperationStatus = operationStatus,
+                OperationStatusText = operationStatusText,
+                BoxStatus = boxStatus,
+                BoxStatusText = boxStatusText,
                 ExpectedMilkYield = ChildText(node, "ExpectedMilkYield"),
                 MilkYield = ChildText(node, "MilkYield")
             };
+        }
+
+        private static string ChildTextAny(XmlNode node, params string[] names)
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                string value = ChildText(node, names[i]);
+                if (!String.IsNullOrEmpty(value)) return value;
+            }
+            return "";
         }
 
         private static string ChildText(XmlNode node, string localName)
@@ -317,10 +418,200 @@ namespace MioneAlarmmelder.Transport
             return "";
         }
 
-        private static Dictionary<string, string> ReadProperties(string path)
+        private Dictionary<string, string> ReadPropertiesCached(string path, FileCache<Dictionary<string, string>> cache)
         {
-            if (!File.Exists(path)) return new Dictionary<string, string>();
-            return PropertiesFile.Read(path);
+            lock (cacheLock)
+            {
+                return LoadCached(path, cache, delegate { return PropertiesFile.Read(path); }, new Dictionary<string, string>());
+            }
+        }
+
+        private T LoadCached<T>(string path, FileCache<T> cache, Func<T> loader, T missingValue)
+        {
+            DateTime stamp = GetFileStamp(path);
+            if (!String.Equals(cache.Path, path, StringComparison.OrdinalIgnoreCase) || cache.StampUtc != stamp || object.Equals(cache.Value, null))
+            {
+                cache.Path = path;
+                cache.StampUtc = stamp;
+                cache.Value = stamp == DateTime.MinValue ? missingValue : loader();
+            }
+            return cache.Value;
+        }
+
+        private static DateTime GetFileStamp(string path)
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        }
+
+        private Dictionary<string, string> LoadTranslations()
+        {
+            string path = settings == null ? "" : settings.TranslationPath;
+            if (String.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            DateTime stamp = File.GetLastWriteTimeUtc(path);
+            lock (translationsLock)
+            {
+                if (translations == null || !String.Equals(path, translationsPath, StringComparison.OrdinalIgnoreCase) || stamp != translationsStampUtc)
+                {
+                    translations = PropertiesFile.Read(path);
+                    translationsPath = path;
+                    translationsStampUtc = stamp;
+                }
+                return translations;
+            }
+        }
+
+        private string Translate(string key)
+        {
+            if (String.IsNullOrEmpty(key)) return "";
+            Dictionary<string, string> values = LoadTranslations();
+            string value;
+            return values.TryGetValue(key, out value) ? value : "";
+        }
+
+        private string ResolveOperationStatusText(string rawValue, string existingText)
+        {
+            string text = Trim(existingText);
+            if (text.Length > 0) return text;
+
+            string raw = Trim(rawValue);
+            if (raw.Length == 0) return "";
+
+            string translated = Translate("Text.Enum.BoxOperationState." + ResolveOperationStateKey(raw));
+            if (translated.Length > 0) return translated;
+
+            return raw;
+        }
+
+        private string ResolveBoxStatusText(string rawValue, string existingText)
+        {
+            string text = Trim(existingText);
+            if (text.Length > 0) return text;
+
+            string raw = Trim(rawValue);
+            if (raw.Length == 0) return "";
+
+            string translated = Translate("Text.Enum.BoxStatus." + ResolveBoxStatusKey(raw));
+            if (translated.Length > 0) return translated;
+
+            return raw;
+        }
+
+        private static string ResolveOperationStateKey(string rawValue)
+        {
+            int code;
+            if (Int32.TryParse(rawValue, out code))
+            {
+                switch (code)
+                {
+                    case 0: return "Offline";
+                    case 1: return "Initialize";
+                    case 2: return "Idle";
+                    case 3: return "Manual";
+                    case 4: return "Automatic";
+                    case 5: return "Emergency";
+                    case 6: return "EmergencyStop";
+                    case 7: return "Error";
+                }
+            }
+
+            switch (NormalizeToken(rawValue))
+            {
+                case "OFFLINE": return "Offline";
+                case "INIT":
+                case "INITIALIZE":
+                case "INITIALISING":
+                case "INITIALIZING": return "Initialize";
+                case "IDLE": return "Idle";
+                case "MANUAL": return "Manual";
+                case "AUTOMATIC": return "Automatic";
+                case "EMERGENCY": return "Emergency";
+                case "EMERGENCYSTOP": return "EmergencyStop";
+                case "ERROR": return "Error";
+            }
+
+            return rawValue;
+        }
+
+        private static string ResolveBoxStatusKey(string rawValue)
+        {
+            int code;
+            if (Int32.TryParse(rawValue, out code))
+            {
+                switch (code)
+                {
+                    case 0: return "OOO";
+                    case 1: return "Initializing";
+                    case 2: return "Blocked";
+                    case 3: return "RequestEntranceGate";
+                    case 4: return "OpenEntranceGate";
+                    case 5: return "WaitForCow";
+                    case 6: return "CowIdentified";
+                    case 7: return "ClaimRobot";
+                    case 8: return "WaitForRobot";
+                    case 9: return "TakeCluster";
+                    case 10: return "StartAttachment";
+                    case 11: return "ManualAttachment";
+                    case 12: return "FinishAttachment";
+                    case 13: return "Milking";
+                    case 14: return "DetachCluster";
+                    case 15: return "ReleaseCow";
+                    case 16: return "ShortClean";
+                    case 17: return "Cleaning";
+                    case 18: return "Disabled";
+                    case 19: return "Unknown";
+                }
+            }
+
+            switch (NormalizeToken(rawValue))
+            {
+                case "OOO": return "OOO";
+                case "INITIALISING":
+                case "INITIALIZING":
+                case "INIT": return "Initializing";
+                case "BLOCKED": return "Blocked";
+                case "REQUESTENTRANCEGATE": return "RequestEntranceGate";
+                case "OPENENTRANCEGATE": return "OpenEntranceGate";
+                case "WAITFORCOW": return "WaitForCow";
+                case "COWIDENTIFIED": return "CowIdentified";
+                case "CLAIMROBOT": return "ClaimRobot";
+                case "WAITFORROBOT": return "WaitForRobot";
+                case "TAKECLUSTER": return "TakeCluster";
+                case "STARTATTACHMENT": return "StartAttachment";
+                case "MANUALATTACHMENT": return "ManualAttachment";
+                case "FINISHATTACHMENT": return "FinishAttachment";
+                case "MILKING": return "Milking";
+                case "DEATACHCLUSTER":
+                case "DETACHCLUSTER": return "DetachCluster";
+                case "RELEASECOW": return "ReleaseCow";
+                case "SHORTCLEAN":
+                case "SHORTCLEANING": return "ShortClean";
+                case "CLEANING": return "Cleaning";
+                case "DISABLED": return "Disabled";
+                case "UNKNOWN": return "Unknown";
+            }
+
+            return rawValue;
+        }
+
+        private static string NormalizeToken(string value)
+        {
+            if (String.IsNullOrEmpty(value)) return "";
+            StringBuilder b = new StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (Char.IsLetterOrDigit(c)) b.Append(Char.ToUpperInvariant(c));
+            }
+            return b.ToString();
+        }
+
+        private static string Trim(string value)
+        {
+            return String.IsNullOrEmpty(value) ? "" : value.Trim();
         }
 
         private static string ReadText(string path, int maximumCharacters)
@@ -372,6 +663,13 @@ namespace MioneAlarmmelder.Transport
         private static string NormalizeRoot(string path)
         {
             return String.IsNullOrEmpty(path) ? @"D:\DairyPln" : path.Trim().TrimEnd('\\', '/');
+        }
+
+        private sealed class FileCache<T>
+        {
+            public string Path = "";
+            public DateTime StampUtc = DateTime.MinValue;
+            public T Value;
         }
     }
 

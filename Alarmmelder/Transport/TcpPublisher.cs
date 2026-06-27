@@ -34,7 +34,7 @@ namespace MioneAlarmmelder.Transport
                         string line = reader.ReadLine();
                         if (line == null) break;
                         AlarmProgressEvent value;
-                        if (AlarmProgressEvent.TryParse(line, "TCP", out value) && progress != null) progress(value);
+                        if (AlarmProgressEvent.TryParse(line, "TCP", "", out value) && progress != null) progress(value);
                         if (line.IndexOf("\"type\":\"alarmResult\"", StringComparison.Ordinal) >= 0) break;
                     }
                 }
@@ -67,7 +67,7 @@ namespace MioneAlarmmelder.Transport
                         string line = reader.ReadLine();
                         if (line == null) break;
                         AlarmProgressEvent value;
-                        if (AlarmProgressEvent.TryParseModemStatus(line, "Socket", out value)) return value;
+                        if (AlarmProgressEvent.TryParseModemStatus(line, "Socket", "", out value)) return value;
                     }
                 }
             }

@@ -8,6 +8,7 @@ namespace MioneAlarmmelder.Core
 {
     public sealed class FileMonitorService : IDisposable
     {
+        private const int MinPollSeconds = 5;
         private readonly object sync = new object();
         private AppSettings settings;
         private Timer timer;
@@ -40,7 +41,7 @@ namespace MioneAlarmmelder.Core
             ReloadReferenceFiles(true);
             lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
             CaptureLogState();
-            timer = new Timer(Poll, null, 0, Math.Max(1, settings.PollSeconds) * 1000);
+            timer = new Timer(Poll, null, 0, PollIntervalMilliseconds());
         }
 
         public void ApplySettings(AppSettings value)
@@ -52,7 +53,7 @@ namespace MioneAlarmmelder.Core
                 ReloadReferenceFiles(true);
                 lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
                 CaptureLogState();
-                if (timer != null) timer.Change(0, Math.Max(1, settings.PollSeconds) * 1000);
+                if (timer != null) timer.Change(0, PollIntervalMilliseconds());
             }
         }
 
@@ -169,7 +170,7 @@ namespace MioneAlarmmelder.Core
         private string FindPriority(string code)
         {
             string exact = "string.data.rdm.alarmmessage.priority." + code;
-            string value; return priorities.TryGetValue(exact, out value) ? value : "System";
+            string value; return priorities.TryGetValue(exact, out value) ? value : "system";
         }
 
         private void ApplyAlarmDetails(AlarmMessage alarm)
@@ -220,6 +221,7 @@ namespace MioneAlarmmelder.Core
         private void OnAlarmFound(AlarmEventArgs e) { if (AlarmFound != null) AlarmFound(this, e); }
         private void OnStatus(string text, MonitorState state) { if (StatusChanged != null) StatusChanged(this, new MonitorStatusEventArgs(text, state)); }
         public void Dispose() { if (timer != null) { timer.Dispose(); timer = null; } }
+        private int PollIntervalMilliseconds() { return Math.Max(MinPollSeconds, settings.PollSeconds) * 1000; }
     }
 
     public enum MonitorState { Disabled, Waiting, Ok, Sending, Error }

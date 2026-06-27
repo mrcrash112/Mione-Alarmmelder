@@ -19,7 +19,7 @@ namespace MioneAlarmmelder.Transport
                 string root = NormalizeRoot(settings.DpProcessPath);
                 string rdmJar = Path.Combine(root, "rdm-manager.jar");
                 string ior = Path.Combine(root, @"RDM\CORBA\DP_RDM_COM.ior");
-                string bridgeJar = Path.Combine(AppDirectory(), @"Assets\MioneDairyPlanBridge.jar");
+                string bridgeJar = ResolveBridgeJar(AppDirectory());
                 if (!File.Exists(rdmJar)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "rdm-manager.jar wurde nicht gefunden: " + rdmJar);
                 if (!File.Exists(ior)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "DP_RDM_COM.ior wurde nicht gefunden: " + ior);
                 if (!File.Exists(bridgeJar)) return DairyPlanCommandResult.Fail("nativeBridgeUnavailable", "MioneDairyPlanBridge.jar wurde nicht gefunden: " + bridgeJar);
@@ -28,7 +28,7 @@ namespace MioneAlarmmelder.Transport
                 if (waitResult != null) return waitResult;
 
                 string java = FindJava(root);
-                string classPath = rdmJar + Path.PathSeparator + bridgeJar;
+                string classPath = bridgeJar + Path.PathSeparator + rdmJar;
                 string args = "-cp " + Quote(classPath) + " MioneDairyPlanBridge --ior " + Quote(ior) + " --command " + Quote(command.Name) +
                     Optional("--box", command.BoxNumber) + Optional("--robot-position", command.RobotPosition) +
                     Optional("--sampling-box", command.SamplingBox) + Optional("--feeding-type", command.FeedingType);
@@ -48,7 +48,10 @@ namespace MioneAlarmmelder.Transport
                     string text = (output + "\r\n" + error).Trim();
                     if (text.IndexOf("org/omg/", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("org.omg.", StringComparison.OrdinalIgnoreCase) >= 0)
                         text += "\r\nJava Runtime ohne CORBA erkannt. Bitte Java 6 bis Java 8 fuer die DairyPlan-Bridge verwenden.";
-                    if (process.ExitCode == 0) return new DairyPlanCommandResult(true, "forwardedToDairyPlan", text.Length == 0 ? "Befehl wurde an DPProcessControl uebergeben." : text);
+                    if (process.ExitCode == 0)
+                    {
+                        return new DairyPlanCommandResult(true, "forwardedToDairyPlan", text.Length == 0 ? "Befehl wurde an DPProcessControl uebergeben." : text);
+                    }
                     return DairyPlanCommandResult.Fail("nativeBridgeError", "DairyPlan-Bridge Fehler " + process.ExitCode + ": " + text);
                 }
             }
@@ -101,6 +104,27 @@ namespace MioneAlarmmelder.Transport
             return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         }
 
+        private static string ResolveBridgeJar(string appDirectory)
+        {
+            string assets = Path.Combine(appDirectory, "Assets");
+            string exact = Path.Combine(assets, "MioneDairyPlanBridge.jar");
+            if (!Directory.Exists(assets)) return exact;
+
+            string best = File.Exists(exact) ? exact : "";
+            DateTime bestTime = File.Exists(exact) ? File.GetLastWriteTimeUtc(exact) : DateTime.MinValue;
+            string[] candidates = Directory.GetFiles(assets, "MioneDairyPlanBridge*.jar", SearchOption.TopDirectoryOnly);
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                DateTime candidateTime = File.GetLastWriteTimeUtc(candidates[i]);
+                if (candidateTime > bestTime)
+                {
+                    best = candidates[i];
+                    bestTime = candidateTime;
+                }
+            }
+            return best.Length == 0 ? exact : best;
+        }
+
         private static string NormalizeRoot(string path)
         {
             return String.IsNullOrEmpty(path) ? @"D:\DairyPln" : path.Trim().TrimEnd('\\', '/');
@@ -123,6 +147,7 @@ namespace MioneAlarmmelder.Transport
             while ((read = reader.Read(buffer, 0, buffer.Length)) > 0) b.Append(buffer, 0, read);
             return b.ToString();
         }
+
     }
 
     public sealed class DairyPlanCommandResult

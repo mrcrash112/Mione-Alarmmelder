@@ -17,8 +17,8 @@ namespace MioneAlarmmelder.Transport
         private string translationsPath = "";
         private DateTime translationsStampUtc = DateTime.MinValue;
         private readonly object translationsLock = new object();
-        private string lastPublishKey = "";
-        private string lastSourceSignature = "";
+        private string lastBoxSignature = "";
+        private string lastSystemSignature = "";
         private bool functionsPublished;
         private readonly FileCache<Dictionary<string, string>> amsStatusCache = new FileCache<Dictionary<string, string>>();
         private readonly FileCache<Dictionary<string, string>> systemCleaningCache = new FileCache<Dictionary<string, string>>();
@@ -78,31 +78,40 @@ namespace MioneAlarmmelder.Transport
         {
             if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
             string root = NormalizeRoot(settings.DpProcessPath);
-            string sourceSignature = BuildSourceSignature(root);
-            lock (publishLock)
-            {
-                if (String.Equals(sourceSignature, lastSourceSignature, StringComparison.Ordinal)) return;
-            }
             MilkingRobotBoxInfo[] boxes = FetchBoxInfos();
-            string publishKey = BuildPublishKey(root, boxes);
+            string boxSignature = BuildBoxSignature(boxes);
+            string systemSignature = BuildSystemSignature(root);
+            bool publishBoxes = false;
+            bool publishSystem = false;
             bool publishFunctions = false;
             lock (publishLock)
             {
-                if (String.Equals(publishKey, lastPublishKey, StringComparison.Ordinal))
+                if (!String.Equals(boxSignature, lastBoxSignature, StringComparison.Ordinal))
                 {
-                    lastSourceSignature = sourceSignature;
-                    return;
+                    lastBoxSignature = boxSignature;
+                    publishBoxes = true;
                 }
-                lastSourceSignature = sourceSignature;
-                lastPublishKey = publishKey;
+                if (!String.Equals(systemSignature, lastSystemSignature, StringComparison.Ordinal))
+                {
+                    lastSystemSignature = systemSignature;
+                    publishSystem = true;
+                }
+                if (!publishBoxes && !publishSystem && functionsPublished) return;
                 if (!functionsPublished)
                 {
                     functionsPublished = true;
                     publishFunctions = true;
                 }
             }
-            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(root, boxes), true);
-            MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
+            if (publishBoxes)
+            {
+                MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(root, boxes), true);
+                MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
+            }
+            if (publishSystem)
+            {
+                MqttRoutePublisher.Publish(settings, "Melkroboter/System", BuildSystemJson(root), true);
+            }
             if (publishFunctions) MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
@@ -118,11 +127,21 @@ namespace MioneAlarmmelder.Transport
             AppendChecks(b, checks); b.Append(',');
             b.Append("\"data\":{");
             AddObject(b, "amsStatus", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"), amsStatusCache)); b.Append(',');
-            AddObject(b, "systemCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"), systemCleaningCache)); b.Append(',');
             AddObject(b, "amsCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"), amsCleaningCache)); b.Append(',');
             AppendBoxes(b, boxes);
             b.Append("},");
             AppendFunctions(b);
+            b.Append('}');
+            return b.ToString();
+        }
+
+        private string BuildSystemJson(string root)
+        {
+            StringBuilder b = new StringBuilder();
+            b.Append('{');
+            Add(b, "type", "melkroboterSystem"); b.Append(',');
+            Add(b, "dairyPlanPath", root); b.Append(',');
+            AddObject(b, "systemCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"), systemCleaningCache));
             b.Append('}');
             return b.ToString();
         }
@@ -281,24 +300,18 @@ namespace MioneAlarmmelder.Transport
             b.Append(']');
         }
 
-        private string BuildSourceSignature(string root)
+        private string BuildBoxSignature(MilkingRobotBoxInfo[] boxes)
         {
             StringBuilder b = new StringBuilder();
-            b.Append(root).Append('|');
-            AppendStamp(b, Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"));
-            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
-            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"));
+            AppendBoxesSignature(b, boxes);
             return b.ToString();
         }
 
-        private string BuildPublishKey(string root, MilkingRobotBoxInfo[] boxes)
+        private string BuildSystemSignature(string root)
         {
             StringBuilder b = new StringBuilder();
             b.Append(root).Append('|');
-            AppendStamp(b, Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"));
             AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
-            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"));
-            AppendBoxesSignature(b, boxes);
             return b.ToString();
         }
 

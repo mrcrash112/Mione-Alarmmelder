@@ -43,6 +43,8 @@ namespace MioneAlarmmelder.Forms
             modemStatusLabel = new Label(); modemStatusLabel.Text = "Modem-MQTT: Offline"; modemStatusLabel.Location = new Point(536, 111); modemStatusLabel.Size = new Size(285, 20);
             firmwareLedPanel = new Panel(); firmwareLedPanel.Location = new Point(104, 84); firmwareLedPanel.Size = new Size(14, 14); firmwareLedPanel.BackColor = Color.Gray;
             firmwareStatusLabel = new Label(); firmwareStatusLabel.Text = "Modem-Firmware: warte auf Status"; firmwareStatusLabel.Location = new Point(125, 82); firmwareStatusLabel.Size = new Size(370, 20);
+            firmwareLedPanel.Visible = false;
+            firmwareStatusLabel.Visible = false;
             tabs = new TabControl(); tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; tabs.Location = new Point(12, 136); tabs.Size = new Size(826, 406);
             overviewPage = new TabPage("Übersicht"); userLoginPage = new TabPage("User Login"); TabPage paths = new TabPage("Dateipfade"); TabPage transport = new TabPage("Versand"); TabPage dpProcess = new TabPage("Melkroboter"); TabPage robotCommands = new TabPage("Funktionslog"); TabPage updates = new TabPage("Updates"); TabPage errors = new TabPage("Fehlerprotokoll");
             tabs.DrawMode = TabDrawMode.OwnerDrawFixed;

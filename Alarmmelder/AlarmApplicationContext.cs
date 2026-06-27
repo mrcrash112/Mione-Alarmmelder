@@ -55,6 +55,7 @@ namespace MioneAlarmmelder
             try
             {
                 monitor.Start(); main.SetPhones(monitor.GetMobileConfigurations()); main.SetStatus("Überwachung aktiv", MonitorState.Ok);
+                if (dispatcher != null) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
                 main.SetMqttStatus(settings.SystemMqttReady ? "Online" : "Offline", settings.SystemMqttReady ? MonitorState.Ok : MonitorState.Disabled);
                 main.SetBackupMqttStatus(settings.BackupMqttConfigured ? "bereit" : "deaktiviert", settings.BackupMqttConfigured ? MonitorState.Waiting : MonitorState.Disabled);
                 main.SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
@@ -185,7 +186,6 @@ namespace MioneAlarmmelder
             if (Interlocked.Exchange(ref heartbeatPending, 1) != 0) return;
             if (settings.TcpEnabled) main.SetTcpStatus("Heartbeat wird gesendet", MonitorState.Sending);
             heartbeatValue = !heartbeatValue; dispatcher.DispatchHeartbeat(heartbeatValue);
-            if (monitor != null && (settings.SystemMqttReady || settings.TcpEnabled)) dispatcher.PublishMobileConfiguration(monitor.GetMobileConfigurations());
         }
         private void HeartbeatCompleted(object sender, DispatchResultEventArgs e)
         {

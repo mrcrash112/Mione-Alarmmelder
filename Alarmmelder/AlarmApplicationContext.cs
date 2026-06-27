@@ -61,7 +61,7 @@ namespace MioneAlarmmelder
                 main.SetTcpStatus(settings.TcpEnabled ? "bereit" : "deaktiviert", settings.TcpEnabled ? MonitorState.Waiting : MonitorState.Disabled);
                 main.SetModemStatus("MQTT", "Offline", MonitorState.Error);
                 main.SetFirmwareStatus(settings.TcpEnabled || settings.SystemMqttReady ? "warte auf Status" : "deaktiviert", settings.TcpEnabled || settings.SystemMqttReady ? MonitorState.Waiting : MonitorState.Disabled);
-                if (settings.SystemMqttReady || settings.TcpEnabled) heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 5000, 5000);
+                if (settings.SystemMqttReady || settings.TcpEnabled) heartbeatTimer = new System.Threading.Timer(HeartbeatTick, null, 30000, 30000);
                 if (settings.DpProcessEnabled && settings.SystemMqttReady)
                 {
                     milkingRobotPublisher = new MilkingRobotPublisher(settings);

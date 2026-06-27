@@ -107,7 +107,7 @@ namespace MioneAlarmmelder.Transport
                 {
                     try
                     {
-                        AlarmProgressEvent status = TcpPublisher.RequestModemStatus(snapshot.TcpHost, snapshot.TcpPort, json, 5000);
+                        AlarmProgressEvent status = TcpPublisher.RequestModemStatus(snapshot.TcpHost, snapshot.TcpPort, json, 30000);
                         if (!String.Equals(status.ModemImei, snapshot.ModemImei, StringComparison.Ordinal))
                             throw new InvalidOperationException("Die Statusantwort gehört zu einer anderen Modem-IMEI.");
                         OnProgressReceived(status); tcpSuccessful = true; sent++;

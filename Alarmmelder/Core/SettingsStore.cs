@@ -40,7 +40,7 @@ namespace MioneAlarmmelder.Core
                 s.TcpEnabled = GetBool(d, "TcpEnabled", false); s.TcpHost = Get(d, "TcpHost", "");
                 s.TcpPort = GetInt(d, "TcpPort", 5000);
                 s.ShowAlarmProgress = GetBool(d, "ShowAlarmProgress", true);
-                s.PollSeconds = Math.Max(1, GetInt(d, "PollSeconds", 2));
+                s.PollSeconds = Math.Max(5, GetInt(d, "PollSeconds", 5));
                 s.StartWithWindows = GetBool(d, "StartWithWindows", false);
                 s.UpdateEnabled = GetBool(d, "UpdateEnabled", true);
                 s.UpdateRepository = Get(d, "UpdateRepository", "mrcrash112/Mione-Alarmmelder");

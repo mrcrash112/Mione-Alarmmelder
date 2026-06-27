@@ -59,7 +59,7 @@ namespace MioneAlarmmelder.Core
                 MqttHost = "", MqttPort = 1883, ModemImei = "",
                 FirebaseApiKey = "", FirebaseAuthDomain = "", FirebaseProjectId = "", FirebaseUid = "", FirebaseEmail = "",
                 FirebaseDisplayName = "", FirebaseProviderId = "", FirebasePhoneNumber = "", FirebaseRefreshToken = "",
-                TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 2,
+                TcpHost = "", TcpPort = 5000, ShowAlarmProgress = true, PollSeconds = 5,
                 UpdateEnabled = true, UpdateRepository = "mrcrash112/Mione-Alarmmelder", UpdateAssetName = "MioneAlarmmelder-*.zip", UpdateChannel = "stable", UpdateCheckMinutes = 60,
                 AlarmHistoryLimit = 2500, ErrorHistoryLimit = 2500,
                 DpProcessEnabled = false, DpProcessPath = @"D:\DairyPln", DpProcessPollSeconds = 30

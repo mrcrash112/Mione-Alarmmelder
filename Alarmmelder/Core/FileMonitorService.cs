@@ -8,6 +8,8 @@ namespace MioneAlarmmelder.Core
 {
     public sealed class FileMonitorService : IDisposable
     {
+        private const int MinPollSeconds = 5;
+        private static readonly TimeSpan ReferenceReloadInterval = TimeSpan.FromSeconds(30);
         private readonly object sync = new object();
         private AppSettings settings;
         private Timer timer;
@@ -20,6 +22,7 @@ namespace MioneAlarmmelder.Core
         private DateTime priorityStamp = DateTime.MinValue;
         private DateTime translationStamp = DateTime.MinValue;
         private DateTime catalogStamp = DateTime.MinValue;
+        private DateTime nextReferenceReloadUtc = DateTime.MinValue;
         private Dictionary<string, string> phones = new Dictionary<string, string>();
         private Dictionary<string, string> active = new Dictionary<string, string>();
         private Dictionary<string, string> priorities = new Dictionary<string, string>();
@@ -40,7 +43,7 @@ namespace MioneAlarmmelder.Core
             ReloadReferenceFiles(true);
             lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
             CaptureLogState();
-            timer = new Timer(Poll, null, 0, Math.Max(1, settings.PollSeconds) * 1000);
+            timer = new Timer(Poll, null, 0, PollIntervalMilliseconds());
         }
 
         public void ApplySettings(AppSettings value)
@@ -52,7 +55,7 @@ namespace MioneAlarmmelder.Core
                 ReloadReferenceFiles(true);
                 lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
                 CaptureLogState();
-                if (timer != null) timer.Change(0, Math.Max(1, settings.PollSeconds) * 1000);
+                if (timer != null) timer.Change(0, PollIntervalMilliseconds());
             }
         }
 
@@ -97,7 +100,7 @@ namespace MioneAlarmmelder.Core
                 if (polling) return; polling = true;
                 try
                 {
-                    ReloadReferenceFiles(false);
+                    if (DateTime.UtcNow >= nextReferenceReloadUtc) ReloadReferenceFiles(false);
                     if (LogChanged())
                     {
                         string line = ReadLastNonEmptyLine(settings.MessageLogPath);
@@ -142,6 +145,7 @@ namespace MioneAlarmmelder.Core
             if (force || Changed(settings.PriorityPath, ref priorityStamp)) priorities = PropertiesFile.Read(settings.PriorityPath);
             if (force || Changed(settings.TranslationPath, ref translationStamp)) translations = PropertiesFile.Read(settings.TranslationPath);
             if (force || Changed(settings.AlarmCatalogPath, ref catalogStamp)) alarmCatalog = ExcelAlarmCatalog.Read(settings.AlarmCatalogPath);
+            nextReferenceReloadUtc = DateTime.UtcNow.Add(ReferenceReloadInterval);
             if (phoneChanged && PhoneSettingsChanged != null) PhoneSettingsChanged(this, EventArgs.Empty);
         }
 
@@ -220,6 +224,7 @@ namespace MioneAlarmmelder.Core
         private void OnAlarmFound(AlarmEventArgs e) { if (AlarmFound != null) AlarmFound(this, e); }
         private void OnStatus(string text, MonitorState state) { if (StatusChanged != null) StatusChanged(this, new MonitorStatusEventArgs(text, state)); }
         public void Dispose() { if (timer != null) { timer.Dispose(); timer = null; } }
+        private int PollIntervalMilliseconds() { return Math.Max(MinPollSeconds, settings.PollSeconds) * 1000; }
     }
 
     public enum MonitorState { Disabled, Waiting, Ok, Sending, Error }

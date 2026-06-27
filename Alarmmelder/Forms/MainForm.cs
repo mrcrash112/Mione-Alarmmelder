@@ -440,8 +440,8 @@ namespace MioneAlarmmelder.Forms
             int mqttPort = settings.MqttPort, tcpPort, poll, updateMinutes, dpProcessPoll;
             if ((mqttEnabledBox.Checked && (!Int32.TryParse(mqttPortBox.Text, out mqttPort) || mqttPort < 1 || mqttPort > 65535)) ||
                 !Int32.TryParse(tcpPortBox.Text, out tcpPort) || tcpPort < 1 || tcpPort > 65535 ||
-                !Int32.TryParse(pollBox.Text, out poll) || poll < 1)
-            { MessageBox.Show("Bitte gültige Ports und ein Prüfintervall ab 1 Sekunde eingeben.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+                !Int32.TryParse(pollBox.Text, out poll) || poll < 5)
+            { MessageBox.Show("Bitte gültige Ports und ein Prüfintervall ab 5 Sekunden eingeben.", "Ungültige Eingabe", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
             if (!mqttEnabledBox.Checked)
             {
                 int backupPort;

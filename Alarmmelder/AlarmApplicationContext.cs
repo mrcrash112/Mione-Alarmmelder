@@ -12,7 +12,7 @@ namespace MioneAlarmmelder
         private AppSettings settings; private FirebaseAuthService firebaseAuthService; private MainForm main; private FileMonitorService monitor; private AlarmDispatcher dispatcher; private MilkingRobotPublisher milkingRobotPublisher;
         private MilkingRobotCommandSubscriber milkingRobotCommandSubscriber;
         private MqttProgressSubscriber mqttProgressSubscriber;
-        private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer, firebaseRefreshTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending, firebaseRefreshPending;
+        private System.Threading.Timer heartbeatTimer, updateTimer, milkingRobotTimer, firebaseRefreshTimer; private int heartbeatPending, updateCheckPending, milkingRobotPending, milkingRobotRefreshQueued, firebaseRefreshPending;
         private string notifiedUpdateTag = "";
         private bool heartbeatValue;
         private bool mqttModemOnline, mqttModemStatusSeen, mqttModemTimeoutLogged;
@@ -86,6 +86,7 @@ namespace MioneAlarmmelder
             if (mqttProgressSubscriber != null) { mqttProgressSubscriber.Dispose(); mqttProgressSubscriber = null; }
             Interlocked.Exchange(ref heartbeatPending, 0);
             Interlocked.Exchange(ref milkingRobotPending, 0);
+            Interlocked.Exchange(ref milkingRobotRefreshQueued, 0);
             Interlocked.Exchange(ref firebaseRefreshPending, 0);
             heartbeatValue = false;
             mqttModemOnline = false;
@@ -230,31 +231,33 @@ namespace MioneAlarmmelder
         private void RequestMilkingRobotRefresh()
         {
             if (milkingRobotPublisher == null) return;
+            Interlocked.Exchange(ref milkingRobotRefreshQueued, 1);
+            StartMilkingRobotRefresh(true);
+        }
+
+        private void StartMilkingRobotRefresh(bool commandTriggered)
+        {
+            if (milkingRobotPublisher == null) return;
+            if (Interlocked.Exchange(ref milkingRobotPending, 1) != 0) return;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                Thread.Sleep(750);
-                for (int i = 0; i < 20; i++)
+                try
                 {
-                    if (Interlocked.Exchange(ref milkingRobotPending, 1) == 0)
-                    {
-                        try { milkingRobotPublisher.Publish(); }
-                        catch (Exception ex) { ErrorLogger.Log("Melkroboter-MQTT", ex); }
-                        finally { Interlocked.Exchange(ref milkingRobotPending, 0); }
-                        return;
-                    }
-                    Thread.Sleep(250);
+                    int queued = Interlocked.Exchange(ref milkingRobotRefreshQueued, 0);
+                    if (commandTriggered || queued == 1) Thread.Sleep(100);
+                    milkingRobotPublisher.Publish();
+                }
+                catch (Exception ex) { ErrorLogger.Log("Melkroboter-MQTT", ex); }
+                finally
+                {
+                    Interlocked.Exchange(ref milkingRobotPending, 0);
+                    if (Interlocked.CompareExchange(ref milkingRobotRefreshQueued, 0, 0) == 1) StartMilkingRobotRefresh(false);
                 }
             });
         }
         private void MilkingRobotTick(object state)
         {
-            if (milkingRobotPublisher == null || Interlocked.Exchange(ref milkingRobotPending, 1) != 0) return;
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                try { milkingRobotPublisher.Publish(); }
-                catch (Exception ex) { ErrorLogger.Log("Melkroboter-MQTT", ex); }
-                finally { Interlocked.Exchange(ref milkingRobotPending, 0); }
-            });
+            StartMilkingRobotRefresh(false);
         }
         private void ScheduleUpdateCheck()
         {

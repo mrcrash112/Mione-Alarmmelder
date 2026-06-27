@@ -9,16 +9,9 @@ namespace MioneAlarmmelder.Core
     public sealed class FileMonitorService : IDisposable
     {
         private const int MinPollSeconds = 5;
-        private static readonly TimeSpan ReferenceReloadInterval = TimeSpan.FromSeconds(30);
-        private static readonly TimeSpan LogVerifyInterval = TimeSpan.FromMinutes(1);
         private readonly object sync = new object();
         private AppSettings settings;
         private Timer timer;
-        private FileSystemWatcher logWatcher;
-        private FileSystemWatcher settingsWatcher;
-        private FileSystemWatcher priorityWatcher;
-        private FileSystemWatcher translationWatcher;
-        private FileSystemWatcher catalogWatcher;
         private bool polling;
         private string lastAlarmLine;
         private DateTime logStamp = DateTime.MinValue;
@@ -28,10 +21,6 @@ namespace MioneAlarmmelder.Core
         private DateTime priorityStamp = DateTime.MinValue;
         private DateTime translationStamp = DateTime.MinValue;
         private DateTime catalogStamp = DateTime.MinValue;
-        private DateTime nextReferenceReloadUtc = DateTime.MinValue;
-        private DateTime nextLogVerifyUtc = DateTime.MinValue;
-        private bool logDirty = true;
-        private bool referenceDirty = true;
         private Dictionary<string, string> phones = new Dictionary<string, string>();
         private Dictionary<string, string> active = new Dictionary<string, string>();
         private Dictionary<string, string> priorities = new Dictionary<string, string>();
@@ -52,10 +41,6 @@ namespace MioneAlarmmelder.Core
             ReloadReferenceFiles(true);
             lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
             CaptureLogState();
-            SetupWatchers();
-            logDirty = false;
-            referenceDirty = false;
-            nextLogVerifyUtc = DateTime.UtcNow.Add(LogVerifyInterval);
             timer = new Timer(Poll, null, 0, PollIntervalMilliseconds());
         }
 
@@ -65,14 +50,9 @@ namespace MioneAlarmmelder.Core
             {
                 settings = value; lastAlarmLine = null;
                 settingsStamp = priorityStamp = translationStamp = catalogStamp = DateTime.MinValue;
-                DisposeWatchers();
                 ReloadReferenceFiles(true);
                 lastAlarmLine = ReadLastNonEmptyLine(settings.MessageLogPath);
                 CaptureLogState();
-                SetupWatchers();
-                logDirty = false;
-                referenceDirty = false;
-                nextLogVerifyUtc = DateTime.UtcNow.Add(LogVerifyInterval);
                 if (timer != null) timer.Change(0, PollIntervalMilliseconds());
             }
         }
@@ -118,33 +98,22 @@ namespace MioneAlarmmelder.Core
                 if (polling) return; polling = true;
                 try
                 {
-                    bool verifyReferences = referenceDirty || DateTime.UtcNow >= nextReferenceReloadUtc;
-                    bool verifyLog = logDirty || DateTime.UtcNow >= nextLogVerifyUtc;
-                    if (verifyReferences)
+                    ReloadReferenceFiles(false);
+                    if (LogChanged())
                     {
-                        ReloadReferenceFiles(false);
-                        referenceDirty = false;
-                    }
-                    if (verifyLog)
-                    {
-                        if (LogChanged() || logDirty)
+                        string line = ReadLastNonEmptyLine(settings.MessageLogPath);
+                        if (line != null && (logSizeChanged || !String.Equals(line, lastAlarmLine, StringComparison.Ordinal)))
                         {
-                            string line = ReadLastNonEmptyLine(settings.MessageLogPath);
-                            if (line != null && (logSizeChanged || !String.Equals(line, lastAlarmLine, StringComparison.Ordinal)))
+                            lastAlarmLine = line;
+                            AlarmMessage alarm;
+                            if (AlarmMessage.TryParse(line, out alarm))
                             {
-                                lastAlarmLine = line;
-                                AlarmMessage alarm;
-                                if (AlarmMessage.TryParse(line, out alarm))
-                                {
-                                    alarm.Priority = FindPriority(alarm.Code);
-                                    ApplyAlarmDetails(alarm);
-                                    OnAlarmFound(new AlarmEventArgs(alarm));
-                                }
-                                else OnStatus("Ungültige Alarmzeile: " + line, MonitorState.Error);
+                                alarm.Priority = FindPriority(alarm.Code);
+                                ApplyAlarmDetails(alarm);
+                                OnAlarmFound(new AlarmEventArgs(alarm));
                             }
+                            else OnStatus("Ungültige Alarmzeile: " + line, MonitorState.Error);
                         }
-                        logDirty = false;
-                        nextLogVerifyUtc = DateTime.UtcNow.Add(LogVerifyInterval);
                     }
                 }
                 catch (Exception ex) { OnStatus(ex.Message, MonitorState.Error); }
@@ -174,7 +143,6 @@ namespace MioneAlarmmelder.Core
             if (force || Changed(settings.PriorityPath, ref priorityStamp)) priorities = PropertiesFile.Read(settings.PriorityPath);
             if (force || Changed(settings.TranslationPath, ref translationStamp)) translations = PropertiesFile.Read(settings.TranslationPath);
             if (force || Changed(settings.AlarmCatalogPath, ref catalogStamp)) alarmCatalog = ExcelAlarmCatalog.Read(settings.AlarmCatalogPath);
-            nextReferenceReloadUtc = DateTime.UtcNow.Add(ReferenceReloadInterval);
             if (phoneChanged && PhoneSettingsChanged != null) PhoneSettingsChanged(this, EventArgs.Empty);
         }
 
@@ -252,70 +220,8 @@ namespace MioneAlarmmelder.Core
         }
         private void OnAlarmFound(AlarmEventArgs e) { if (AlarmFound != null) AlarmFound(this, e); }
         private void OnStatus(string text, MonitorState state) { if (StatusChanged != null) StatusChanged(this, new MonitorStatusEventArgs(text, state)); }
-        public void Dispose()
-        {
-            DisposeWatchers();
-            if (timer != null) { timer.Dispose(); timer = null; }
-        }
+        public void Dispose() { if (timer != null) { timer.Dispose(); timer = null; } }
         private int PollIntervalMilliseconds() { return Math.Max(MinPollSeconds, settings.PollSeconds) * 1000; }
-        private void SetupWatchers()
-        {
-            logWatcher = CreateWatcher(settings.MessageLogPath, MarkLogDirty);
-            settingsWatcher = CreateWatcher(settings.AlarmSettingsPath, MarkReferenceDirty);
-            priorityWatcher = CreateWatcher(settings.PriorityPath, MarkReferenceDirty);
-            translationWatcher = CreateWatcher(settings.TranslationPath, MarkReferenceDirty);
-            catalogWatcher = CreateWatcher(settings.AlarmCatalogPath, MarkReferenceDirty);
-        }
-
-        private FileSystemWatcher CreateWatcher(string path, FileSystemEventHandler handler)
-        {
-            try
-            {
-                if (String.IsNullOrEmpty(path)) return null;
-                string directory = Path.GetDirectoryName(path);
-                string filter = Path.GetFileName(path);
-                if (String.IsNullOrEmpty(directory) || String.IsNullOrEmpty(filter) || !Directory.Exists(directory)) return null;
-                FileSystemWatcher watcher = new FileSystemWatcher(directory, filter);
-                watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.CreationTime;
-                watcher.IncludeSubdirectories = false;
-                watcher.Changed += handler;
-                watcher.Created += handler;
-                watcher.Deleted += handler;
-                watcher.Renamed += delegate(object sender, RenamedEventArgs e) { handler(sender, e); };
-                watcher.EnableRaisingEvents = true;
-                return watcher;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private void MarkLogDirty(object sender, FileSystemEventArgs e)
-        {
-            lock (sync) { logDirty = true; }
-        }
-
-        private void MarkReferenceDirty(object sender, FileSystemEventArgs e)
-        {
-            lock (sync) { referenceDirty = true; }
-        }
-
-        private void DisposeWatchers()
-        {
-            DisposeWatcher(ref logWatcher);
-            DisposeWatcher(ref settingsWatcher);
-            DisposeWatcher(ref priorityWatcher);
-            DisposeWatcher(ref translationWatcher);
-            DisposeWatcher(ref catalogWatcher);
-        }
-
-        private static void DisposeWatcher(ref FileSystemWatcher watcher)
-        {
-            if (watcher == null) return;
-            try { watcher.EnableRaisingEvents = false; watcher.Dispose(); } catch { }
-            watcher = null;
-        }
     }
 
     public enum MonitorState { Disabled, Waiting, Ok, Sending, Error }

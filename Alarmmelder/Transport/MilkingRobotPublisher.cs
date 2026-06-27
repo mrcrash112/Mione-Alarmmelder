@@ -11,10 +11,18 @@ namespace MioneAlarmmelder.Transport
     public sealed class MilkingRobotPublisher
     {
         private readonly AppSettings settings;
+        private readonly object snapshotLock = new object();
         private Dictionary<string, string> translations;
         private string translationsPath = "";
         private DateTime translationsStampUtc = DateTime.MinValue;
         private readonly object translationsLock = new object();
+        private readonly FileCache<string> runningCache = new FileCache<string>();
+        private readonly FileCache<string> pidCache = new FileCache<string>();
+        private readonly FileCache<Dictionary<string, string>> amsStatusCache = new FileCache<Dictionary<string, string>>();
+        private readonly FileCache<Dictionary<string, string>> systemCleaningCache = new FileCache<Dictionary<string, string>>();
+        private readonly FileCache<Dictionary<string, string>> amsCleaningCache = new FileCache<Dictionary<string, string>>();
+        private readonly FileCache<string> areaCountersCache = new FileCache<string>();
+        private readonly FileCache<string> robotCoordinatesCache = new FileCache<string>();
         private static readonly string[] RequiredFiles = new string[]
         {
             "DPProcessControl.exe",
@@ -88,13 +96,13 @@ namespace MioneAlarmmelder.Transport
             b.Append("\"communicationReady\":").Append(AllFound(checks) ? "true" : "false").Append(',');
             AppendChecks(b, checks); b.Append(',');
             b.Append("\"data\":{");
-            Add(b, "rdmRunning", ReadText(Path.Combine(root, @"RDM\running.tdm"), 400)); b.Append(',');
-            Add(b, "rdmPid", ReadText(Path.Combine(root, @"RDM\pid.tdm"), 80)); b.Append(',');
-            AddObject(b, "amsStatus", ReadProperties(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"))); b.Append(',');
-            AddObject(b, "systemCleaning", ReadProperties(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"))); b.Append(',');
-            AddObject(b, "amsCleaning", ReadProperties(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"))); b.Append(',');
-            Add(b, "areaCountersXml", ReadText(Path.Combine(root, "AreaCounters.xml"), 24000)); b.Append(',');
-            Add(b, "robotCurrentCoordinatesCsv", ReadText(Path.Combine(root, "RobotCurrentCoordinates.csv"), 24000)); b.Append(',');
+            Add(b, "rdmRunning", ReadTextCached(Path.Combine(root, @"RDM\running.tdm"), 400, runningCache)); b.Append(',');
+            Add(b, "rdmPid", ReadTextCached(Path.Combine(root, @"RDM\pid.tdm"), 80, pidCache)); b.Append(',');
+            AddObject(b, "amsStatus", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"), amsStatusCache)); b.Append(',');
+            AddObject(b, "systemCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"), systemCleaningCache)); b.Append(',');
+            AddObject(b, "amsCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"), amsCleaningCache)); b.Append(',');
+            Add(b, "areaCountersXml", ReadTextCached(Path.Combine(root, "AreaCounters.xml"), 24000, areaCountersCache)); b.Append(',');
+            Add(b, "robotCurrentCoordinatesCsv", ReadTextCached(Path.Combine(root, "RobotCurrentCoordinates.csv"), 24000, robotCoordinatesCache)); b.Append(',');
             AppendBoxes(b, boxes);
             b.Append("},");
             AppendFunctions(b);
@@ -334,10 +342,37 @@ namespace MioneAlarmmelder.Transport
             return "";
         }
 
-        private static Dictionary<string, string> ReadProperties(string path)
+        private string ReadTextCached(string path, int maximumCharacters, FileCache<string> cache)
         {
-            if (!File.Exists(path)) return new Dictionary<string, string>();
-            return PropertiesFile.Read(path);
+            lock (snapshotLock)
+            {
+                return LoadCached(path, cache, delegate { return ReadText(path, maximumCharacters); }, "");
+            }
+        }
+
+        private Dictionary<string, string> ReadPropertiesCached(string path, FileCache<Dictionary<string, string>> cache)
+        {
+            lock (snapshotLock)
+            {
+                return LoadCached(path, cache, delegate { return PropertiesFile.Read(path); }, new Dictionary<string, string>());
+            }
+        }
+
+        private T LoadCached<T>(string path, FileCache<T> cache, Func<T> loader, T missingValue)
+        {
+            DateTime stamp = GetFileStamp(path);
+            if (!String.Equals(cache.Path, path, StringComparison.OrdinalIgnoreCase) || cache.StampUtc != stamp || object.Equals(cache.Value, null))
+            {
+                cache.Path = path;
+                cache.StampUtc = stamp;
+                cache.Value = stamp == DateTime.MinValue ? missingValue : loader();
+            }
+            return cache.Value;
+        }
+
+        private static DateTime GetFileStamp(string path)
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
         }
 
         private Dictionary<string, string> LoadTranslations()
@@ -560,6 +595,13 @@ namespace MioneAlarmmelder.Transport
         private static string NormalizeRoot(string path)
         {
             return String.IsNullOrEmpty(path) ? @"D:\DairyPln" : path.Trim().TrimEnd('\\', '/');
+        }
+
+        private sealed class FileCache<T>
+        {
+            public string Path = "";
+            public DateTime StampUtc = DateTime.MinValue;
+            public T Value;
         }
     }
 

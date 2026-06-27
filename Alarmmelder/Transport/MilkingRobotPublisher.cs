@@ -11,21 +11,18 @@ namespace MioneAlarmmelder.Transport
     public sealed class MilkingRobotPublisher
     {
         private readonly AppSettings settings;
-        private readonly object snapshotLock = new object();
         private readonly object publishLock = new object();
+        private readonly object cacheLock = new object();
         private Dictionary<string, string> translations;
         private string translationsPath = "";
         private DateTime translationsStampUtc = DateTime.MinValue;
         private readonly object translationsLock = new object();
         private string lastPublishKey = "";
+        private string lastSourceSignature = "";
         private bool functionsPublished;
-        private readonly FileCache<string> runningCache = new FileCache<string>();
-        private readonly FileCache<string> pidCache = new FileCache<string>();
         private readonly FileCache<Dictionary<string, string>> amsStatusCache = new FileCache<Dictionary<string, string>>();
         private readonly FileCache<Dictionary<string, string>> systemCleaningCache = new FileCache<Dictionary<string, string>>();
         private readonly FileCache<Dictionary<string, string>> amsCleaningCache = new FileCache<Dictionary<string, string>>();
-        private readonly FileCache<string> areaCountersCache = new FileCache<string>();
-        private readonly FileCache<string> robotCoordinatesCache = new FileCache<string>();
         private static readonly string[] RequiredFiles = new string[]
         {
             "DPProcessControl.exe",
@@ -80,15 +77,23 @@ namespace MioneAlarmmelder.Transport
         public void Publish()
         {
             if (!settings.DpProcessEnabled || !settings.SystemMqttReady) return;
+            string root = NormalizeRoot(settings.DpProcessPath);
+            string sourceSignature = BuildSourceSignature(root);
+            lock (publishLock)
+            {
+                if (String.Equals(sourceSignature, lastSourceSignature, StringComparison.Ordinal)) return;
+            }
             MilkingRobotBoxInfo[] boxes = FetchBoxInfos();
-            string publishKey = BuildPublishKey(boxes);
+            string publishKey = BuildPublishKey(root, boxes);
             bool publishFunctions = false;
             lock (publishLock)
             {
                 if (String.Equals(publishKey, lastPublishKey, StringComparison.Ordinal))
                 {
+                    lastSourceSignature = sourceSignature;
                     return;
                 }
+                lastSourceSignature = sourceSignature;
                 lastPublishKey = publishKey;
                 if (!functionsPublished)
                 {
@@ -96,31 +101,25 @@ namespace MioneAlarmmelder.Transport
                     publishFunctions = true;
                 }
             }
-            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(boxes), true);
+            MqttRoutePublisher.Publish(settings, "Melkroboter", BuildSnapshotJson(root, boxes), true);
             MqttRoutePublisher.Publish(settings, "Melkroboter/Boxen", BuildBoxesJson(boxes), true);
             if (publishFunctions) MqttRoutePublisher.Publish(settings, "Melkroboter/Funktionen", BuildFunctionsJson(), true);
         }
 
-        private string BuildSnapshotJson(MilkingRobotBoxInfo[] boxes)
+        private string BuildSnapshotJson(string root, MilkingRobotBoxInfo[] boxes)
         {
-            string root = NormalizeRoot(settings.DpProcessPath);
             MilkingRobotFileCheck[] checks = CheckFiles(root);
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboter"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
             Add(b, "dairyPlanPath", root); b.Append(',');
             b.Append("\"communicationEnabled\":").Append(settings.DpProcessEnabled ? "true" : "false").Append(',');
             b.Append("\"communicationReady\":").Append(AllFound(checks) ? "true" : "false").Append(',');
             AppendChecks(b, checks); b.Append(',');
             b.Append("\"data\":{");
-            Add(b, "rdmRunning", ReadTextCached(Path.Combine(root, @"RDM\running.tdm"), 400, runningCache)); b.Append(',');
-            Add(b, "rdmPid", ReadTextCached(Path.Combine(root, @"RDM\pid.tdm"), 80, pidCache)); b.Append(',');
             AddObject(b, "amsStatus", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"), amsStatusCache)); b.Append(',');
             AddObject(b, "systemCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"), systemCleaningCache)); b.Append(',');
             AddObject(b, "amsCleaning", ReadPropertiesCached(Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"), amsCleaningCache)); b.Append(',');
-            Add(b, "areaCountersXml", ReadTextCached(Path.Combine(root, "AreaCounters.xml"), 24000, areaCountersCache)); b.Append(',');
-            Add(b, "robotCurrentCoordinatesCsv", ReadTextCached(Path.Combine(root, "RobotCurrentCoordinates.csv"), 24000, robotCoordinatesCache)); b.Append(',');
             AppendBoxes(b, boxes);
             b.Append("},");
             AppendFunctions(b);
@@ -133,7 +132,6 @@ namespace MioneAlarmmelder.Transport
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboterBoxen"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
             AppendBoxes(b, boxes);
             b.Append('}');
             return b.ToString();
@@ -144,7 +142,6 @@ namespace MioneAlarmmelder.Transport
             StringBuilder b = new StringBuilder();
             b.Append('{');
             Add(b, "type", "melkroboterFunctions"); b.Append(',');
-            Add(b, "timestampUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")); b.Append(',');
             Add(b, "commandTopic", "<firebase_system_id>/Melkroboter/Command"); b.Append(',');
             Add(b, "resultTopic", "<firebase_system_id>/Melkroboter/Result"); b.Append(',');
             Add(b, "commandExample", "{\"requestId\":\"1\",\"command\":\"stopMilking\",\"boxNumber\":1}"); b.Append(',');
@@ -284,18 +281,23 @@ namespace MioneAlarmmelder.Transport
             b.Append(']');
         }
 
-        private string BuildPublishKey(MilkingRobotBoxInfo[] boxes)
+        private string BuildSourceSignature(string root)
         {
             StringBuilder b = new StringBuilder();
-            string root = NormalizeRoot(settings.DpProcessPath);
             b.Append(root).Append('|');
-            AppendStamp(b, Path.Combine(root, @"RDM\running.tdm"));
-            AppendStamp(b, Path.Combine(root, @"RDM\pid.tdm"));
             AppendStamp(b, Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"));
             AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
             AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"));
-            AppendStamp(b, Path.Combine(root, "AreaCounters.xml"));
-            AppendStamp(b, Path.Combine(root, "RobotCurrentCoordinates.csv"));
+            return b.ToString();
+        }
+
+        private string BuildPublishKey(string root, MilkingRobotBoxInfo[] boxes)
+        {
+            StringBuilder b = new StringBuilder();
+            b.Append(root).Append('|');
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\preferences\user\amsstatus.properties"));
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\systemcleaning.properties"));
+            AppendStamp(b, Path.Combine(root, @"RDM\configuration\data\rdm\amscleaning.properties"));
             AppendBoxesSignature(b, boxes);
             return b.ToString();
         }
@@ -403,17 +405,9 @@ namespace MioneAlarmmelder.Transport
             return "";
         }
 
-        private string ReadTextCached(string path, int maximumCharacters, FileCache<string> cache)
-        {
-            lock (snapshotLock)
-            {
-                return LoadCached(path, cache, delegate { return ReadText(path, maximumCharacters); }, "");
-            }
-        }
-
         private Dictionary<string, string> ReadPropertiesCached(string path, FileCache<Dictionary<string, string>> cache)
         {
-            lock (snapshotLock)
+            lock (cacheLock)
             {
                 return LoadCached(path, cache, delegate { return PropertiesFile.Read(path); }, new Dictionary<string, string>());
             }
